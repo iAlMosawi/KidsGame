@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Learn & Play · تعلّم والعب</title>
+  <meta name="description" content="Fun English, Math and Arabic games for elementary school, grades 1 to 6.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎈</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Cairo:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <button id="backBtn" class="icon-btn" title="Back" hidden>⬅️</button>
+    <button id="homeBtn" class="brand" title="Home">🎈 Learn &amp; Play <span class="ar">تعلّم والعب</span></button>
+    <div class="spacer"></div>
+    <div class="stars-total" title="Total stars">⭐ <span id="starTotal">0</span></div>
+    <button id="soundBtn" class="icon-btn" title="Sound on/off">🔊</button>
+  </header>
+  <main id="app"></main>
+  <div id="confetti" aria-hidden="true"></div>
+
+  <script src="js/util.js"></script>
+  <script src="js/data/english.js"></script>
+  <script src="js/data/math.js"></script>
+  <script src="js/data/arabic.js"></script>
+  <script src="js/games.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
