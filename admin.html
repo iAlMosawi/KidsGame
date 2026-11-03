@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Cairo:wght@500;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=20261103b">
   <style>
     main { max-width: 1180px; }
     .admin-top { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
@@ -62,9 +62,9 @@
   </header>
   <main id="app"></main>
 
-  <script src="js/config.js"></script>
-  <script src="js/progress.js"></script>
-  <script src="js/util.js"></script>
+  <script src="js/config.js?v=20261103b"></script>
+  <script src="js/progress.js?v=20261103b"></script>
+  <script src="js/util.js?v=20261103b"></script>
   <script>
   (function () {
     const esc = U.esc, $app = document.getElementById('app');
@@ -87,17 +87,18 @@
       $app.innerHTML = `<form class="card pin-box">
         <div style="font-size:3rem">🔒</div><h2>Admin PIN</h2>
         <p class="muted">${Progress.cloud() ? 'Enter the PIN you set in your Google Apps Script.' : 'Enter the admin PIN (see js/config.js).'}</p>
-        <input id="pin" type="password" inputmode="numeric" autocomplete="current-password" required>
+        <input id="pin" type="password" inputmode="numeric" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" required>
         <div class="err">${esc(msg)}</div>
         <button class="btn primary" type="submit">Open dashboard</button></form>`;
       const inp = $app.querySelector('#pin'); inp.focus();
-      $app.querySelector('form').onsubmit = async e => { e.preventDefault(); await unlock(inp.value); };
+      inp.value = '';
+      $app.querySelector('form').onsubmit = async e => { e.preventDefault(); await unlock(inp.value.replace(/\s+/g, '')); };
     }
     async function unlock(pin, refresh = false) {
       try {
         const before = S.data.length;
         if (Progress.cloud()) S.data = await Progress.fetchCloud(pin);
-        else { if (pin !== String(CONFIG.LOCAL_ADMIN_PIN)) throw new Error('Wrong PIN'); S.data = Progress.local(); }
+        else { if (String(pin).trim() !== String(CONFIG.LOCAL_ADMIN_PIN).trim()) throw new Error('Wrong PIN'); S.data = Progress.local(); }
         S.pin = pin;
         const added = S.data.length - before;
         S.updated = new Date();
