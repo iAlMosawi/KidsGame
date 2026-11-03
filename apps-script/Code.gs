@@ -2,7 +2,7 @@
  * Learn & Play — results collector for Google Sheets.
  * Setup steps are in the README ("Collect results from all devices").
  */
-const ADMIN_PIN = 'change-this-pin';   // ← choose your own PIN for the admin dashboard
+const ADMIN_PIN = '201819';   // ← PIN for the admin dashboard (change it if you like)
 const SHEET_NAME = 'Results';
 const HEAD = ['id', 'time', 'name', 'grade', 'subject', 'topic', 'game', 'score', 'total', 'stars', 'seconds'];
 

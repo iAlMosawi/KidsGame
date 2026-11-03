@@ -6,5 +6,5 @@ const CONFIG = {
 
   // PIN for the admin dashboard when no Google Sheet is connected.
   // When a Sheet IS connected, the PIN is checked by your Apps Script (ADMIN_PIN in Code.gs) instead.
-  LOCAL_ADMIN_PIN: '1234',
+  LOCAL_ADMIN_PIN: '201819',
 };

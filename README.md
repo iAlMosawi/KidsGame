@@ -20,7 +20,7 @@ Pick a grade, then a subject, then a topic (or "All topics"), then a game.
 - `admin.html` shows every child: average score, level, results per subject, minutes played and last played.
   You can filter by grade, subject and date, and export to CSV.
   Click a child to see what they're good at, what needs practice, and every game they played.
-- The PIN without a Google Sheet is `1234`. Change `LOCAL_ADMIN_PIN` in `js/config.js`.
+- The admin PIN is `201819`. Change `LOCAL_ADMIN_PIN` in `js/config.js` (and `ADMIN_PIN` in `apps-script/Code.gs` if you use a Google Sheet).
 
 ## Collect results from all devices (Google Sheet, free, about 5 minutes)
 Without this step, each device only keeps its own results, and the dashboard shows only the device it's opened on.
@@ -29,7 +29,7 @@ To gather results from every phone, tablet and computer in one place:
 1. Create a new Google Sheet (for example "Kids Game Results").
 2. In the Sheet, open **Extensions → Apps Script**.
 3. Delete what's there and paste everything from [`apps-script/Code.gs`](apps-script/Code.gs).
-   Change `ADMIN_PIN` at the top to a PIN only you know. Click 💾 **Save**.
+   The PIN is set to `201819` at the top (`ADMIN_PIN`); change it if you like. Click 💾 **Save**.
 4. Click **Deploy → New deployment**. Under "Select type" (⚙️), choose **Web app**. Then set:
    - *Execute as*: **Me**
    - *Who has access*: **Anyone**

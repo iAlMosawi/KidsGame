@@ -44,6 +44,8 @@
     .empty { padding: 30px; text-align: center; color: var(--muted); }
     .pin-box { max-width: 380px; margin: 60px auto; text-align: center; }
     .pin-box input { width: 100%; text-align: center; font-size: 1.6rem; letter-spacing: 6px; margin: 12px 0; }
+    .updated { margin: -6px 0 12px; min-height: 1.4em; }
+    .flash { color: #2b8a3e; margin-inline-start: 8px; animation: bounce .4s; }
     .err { color: var(--bad); font-weight: 700; min-height: 1.5em; }
     .kid-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 6px 0 14px; }
     .kid-head h2 { margin: 0; font-size: 2rem; }
@@ -68,7 +70,7 @@
     const esc = U.esc, $app = document.getElementById('app');
     const SUBJ = { english: '🔤 English', math: '🔢 Math', arabic: '🌙 Arabic' };
     const GAME = { quiz: '❓ Quiz', time: '⏱️ Time Attack', balloon: '🎈 Balloon Pop', memory: '🃏 Memory', builder: '🧩 Word Builder' };
-    const S = { pin: '', data: [], kid: null, sort: 'last', dir: -1, f: { grade: '', subject: '', q: '', days: '' } };
+    const S = { updated: null, msg: '', busy: false, pin: '', data: [], kid: null, sort: 'last', dir: -1, f: { grade: '', subject: '', q: '', days: '' } };
 
     /* Percent for one game: right answers out of total when that makes sense, otherwise stars out of 3. */
     const pct = r => (['quiz', 'balloon', 'builder'].includes(r.game) && +r.total > 0) ? Math.min(1, +r.score / +r.total) : (+r.stars || 0) / 3;
@@ -91,14 +93,19 @@
       const inp = $app.querySelector('#pin'); inp.focus();
       $app.querySelector('form').onsubmit = async e => { e.preventDefault(); await unlock(inp.value); };
     }
-    async function unlock(pin) {
+    async function unlock(pin, refresh = false) {
       try {
+        const before = S.data.length;
         if (Progress.cloud()) S.data = await Progress.fetchCloud(pin);
         else { if (pin !== String(CONFIG.LOCAL_ADMIN_PIN)) throw new Error('Wrong PIN'); S.data = Progress.local(); }
         S.pin = pin;
+        const added = S.data.length - before;
+        S.updated = new Date();
+        S.msg = refresh ? (added > 0 ? `✅ ${added} new result${added > 1 ? 's' : ''}` : '✅ Up to date — no new results') : '';
         try { sessionStorage.setItem('kg-admin-pin', pin); } catch (e) {}
         render();
       } catch (e) {
+        if (refresh && e.message !== 'Wrong PIN') { S.msg = '⚠️ Could not refresh: ' + e.message; render(); return; }
         try { sessionStorage.removeItem('kg-admin-pin'); } catch (er) {}
         login(e.message === 'Wrong PIN' ? 'Wrong PIN, try again.' : 'Could not load results: ' + e.message);
       }
@@ -138,13 +145,15 @@
       return `<div class="admin-top"><h2>${S.kid ? '' : 'Kids progress'}</h2>
         <div class="row" style="margin:0">
           <span class="source ${cloud ? 'cloud' : 'local'}">${cloud ? '☁️ Google Sheet · all devices' : '📱 This device only'}</span>
-          <button class="btn ghost" id="refresh">🔄 Refresh</button>
+          <button class="btn ghost" id="refresh" ${S.busy ? 'disabled' : ''}>${S.busy ? '⏳ Refreshing…' : '🔄 Refresh'}</button>
           <button class="btn ghost" id="csv">⬇️ Export CSV</button>
         </div></div>
+        <p class="updated muted">${S.updated ? 'Last updated ' + S.updated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' · updates automatically every 30 seconds' : ''}
+          ${S.msg ? `<b class="flash">${esc(S.msg)}</b>` : ''}</p>
         ${cloud ? '' : `<div class="note">📱 Results are only being saved on <b>this device</b>. To see every child's results from any phone, tablet or computer, connect a free Google Sheet. The steps are in the README, under <b>"Collect results from all devices"</b>.</div>`}`;
     }
     function bindHeader() {
-      $app.querySelector('#refresh').onclick = () => unlock(S.pin);
+      $app.querySelector('#refresh').onclick = () => refresh(true);
       $app.querySelector('#csv').onclick = exportCSV;
     }
 
@@ -234,6 +243,22 @@
       a.download = 'kids-progress-' + new Date().toISOString().slice(0, 10) + '.csv';
       a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     }
+
+    /* Reload results without leaving the current view. Typing in the search box is never interrupted. */
+    async function refresh(manual) {
+      if (!S.pin || S.busy) return;
+      const typing = document.activeElement && document.activeElement.id === 'q';
+      if (!manual && typing) return;
+      S.busy = true; if (manual) render();
+      const y = window.scrollY;
+      await unlock(S.pin, manual);
+      S.busy = false; render(); window.scrollTo(0, y);
+      if (manual) { clearTimeout(S.flashT); S.flashT = setTimeout(() => { S.msg = ''; const f = $app.querySelector('.flash'); if (f) f.remove(); }, 4000); }
+      else S.msg = '';
+    }
+    setInterval(() => { if (document.visibilityState === 'visible') refresh(false); }, 30000);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refresh(false); });
+    window.addEventListener('storage', e => { if (e.key && e.key.startsWith('kids-games-results') && !Progress.cloud()) refresh(false); });
 
     let saved = ''; try { saved = sessionStorage.getItem('kg-admin-pin') || ''; } catch (e) {}
     if (saved) unlock(saved); else login();
