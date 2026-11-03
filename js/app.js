@@ -10,7 +10,7 @@
       praise: ['Great job! 🎉', 'Awesome! 🌟', 'Well done! 👏', 'Super! 🚀', 'Correct! ✅'],
       memoryHint: 'Flip two cards. Find the matching pairs!', noGame: 'This game is not available for this topic yet.',
       games: { quiz: ['Quiz', '10 questions'], time: ['Time Attack', 'Beat the 60-second clock'], balloon: ['Balloon Pop', 'Pop the right balloon'], memory: ['Memory Match', 'Find the pairs'], builder: ['Word Builder', 'Spell with letter tiles'] },
-      allTopics: 'All topics', chooseTopic: 'Choose a topic', chooseGame: 'Choose a game', playAgain: 'Play again', otherGame: 'Other games',
+      allTopics: 'All topics', selected: 'Games will use', tapTopic: 'Tap a topic to practice just that one.', chooseTopic: 'Choose a topic', chooseGame: 'Choose a game', playAgain: 'Play again', otherGame: 'Other games',
       score: 'Score', result: ['Keep practicing! 💪', 'Good try! 🙂', 'Great work! 😃', 'Amazing! 🏆'],
     },
     ar: {
@@ -19,7 +19,7 @@
       praise: ['أحسنت! 🎉', 'رائع! 🌟', 'ممتاز! 👏', 'بطل! 🚀', 'صحيح! ✅'],
       memoryHint: 'اقلبْ بطاقتين وابحثْ عن الأزواج المتطابقة!', noGame: 'هذه اللعبة غير متاحة لهذا الدرس.',
       games: { quiz: ['اختبار', '١٠ أسئلة'], time: ['سباق الوقت', 'أجبْ قبل انتهاء ٦٠ ثانية'], balloon: ['فرقعة البالونات', 'فرقعِ البالون الصحيح'], memory: ['لعبة الذاكرة', 'ابحثْ عن الأزواج'], builder: ['بناء الكلمات', 'رتّبِ الحروف'] },
-      allTopics: 'كل الدروس', chooseTopic: 'اخترِ الدرس', chooseGame: 'اخترِ اللعبة', playAgain: 'العبْ مرةً أخرى', otherGame: 'ألعاب أخرى',
+      allTopics: 'كل الدروس', selected: 'الألعاب ستستخدم', tapTopic: 'اضغطْ على درسٍ للتدرّب عليه وحده.', chooseTopic: 'اخترِ الدرس', chooseGame: 'اخترِ اللعبة', playAgain: 'العبْ مرةً أخرى', otherGame: 'ألعاب أخرى',
       score: 'النتيجة', result: ['استمرَّ في التدريب! 💪', 'محاولةٌ جيدة! 🙂', 'عملٌ رائع! 😃', 'مذهل! 🏆'],
     },
   };
@@ -113,16 +113,20 @@
     $app.querySelectorAll('.subject').forEach(b => (b.onclick = () => go('hub', { subject: b.dataset.s, topic: 'all' })));
   }
 
-  function hub() {
+  const topicName = () => (state.topic === 'all' ? t('allTopics') : (gradeData().topics.find(x => x.id === state.topic) || {}).name);
+
+  function hub(pulse = false) {
     const s = subj(), gd = gradeData(), rtl = s.rtl;
     $app.innerHTML = `
       <div class="hub ${s.id}" ${rtl ? 'dir="rtl" lang="ar"' : ''}>
         <h2 class="screen-title">${s.icon} ${rtl ? s.nameAr : s.name} · ${rtl ? 'الصف ' + state.grade : 'Grade ' + state.grade}</h2>
         <h3>${t('chooseTopic')}</h3>
+        <p class="hint start">${t('tapTopic')}</p>
         <div class="chips">
-          <button class="chip ${state.topic === 'all' ? 'on' : ''}" data-t="all">✨ ${t('allTopics')}</button>
-          ${gd.topics.map(x => `<button class="chip ${state.topic === x.id ? 'on' : ''}" data-t="${x.id}">${esc(x.name)}</button>`).join('')}
+          <button class="chip ${state.topic === 'all' ? 'on' : ''}" data-t="all">${state.topic === 'all' ? '✅' : '✨'} ${t('allTopics')}</button>
+          ${gd.topics.map(x => `<button class="chip ${state.topic === x.id ? 'on' : ''}" data-t="${x.id}">${state.topic === x.id ? '✅ ' : ''}${esc(x.name)}</button>`).join('')}
         </div>
+        <div class="selected-topic${pulse ? ' pulse' : ''}">🎯 ${t('selected')}: <b>${esc(topicName())}</b></div>
         <h3>${t('chooseGame')}</h3>
         <div class="grid games">${Games.list.filter(g => g.needs !== 'words' || s.id !== 'math').map(g => {
           const ok = gameAvailable(g), [name, desc] = t('games')[g.id], best = stars[key(g.id)] || 0;
@@ -131,7 +135,10 @@
             <span class="mini-stars">${'★'.repeat(best)}${'☆'.repeat(3 - best)}</span></button>`;
         }).join('')}</div>
       </div>`;
-    $app.querySelectorAll('.chip').forEach(b => (b.onclick = () => { state.topic = b.dataset.t; hub(); }));
+    $app.querySelectorAll('.chip').forEach(b => (b.onclick = () => {
+      const y = window.scrollY;
+      state.topic = b.dataset.t; Sound.flip(); hub(true); window.scrollTo(0, y);
+    }));
     $app.querySelectorAll('.game-card').forEach(b => (b.onclick = () => go('game', { game: b.dataset.id })));
   }
 
@@ -165,7 +172,7 @@
     };
     const [name] = t('games')[g.id];
     $app.innerHTML = `<div class="game-wrap ${s.id}" ${s.rtl ? 'dir="rtl" lang="ar"' : ''}>
-      <h2 class="screen-title small">${g.icon} ${name}</h2><div class="game-root"></div></div>`;
+      <h2 class="screen-title small">${g.icon} ${name}</h2><p class="game-topic">🎯 ${esc(topicName())}</p><div class="game-root"></div></div>`;
     g.run({
       root: $app.querySelector('.game-root'), gen, pairs, words: gd.words || [], lang: s.lang, grade: state.grade, t,
       alive: () => state.runId === runId && state.screen === 'game',

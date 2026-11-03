@@ -78,7 +78,17 @@ h3 { margin: 22px 0 10px; font-size: 1.25rem; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip { padding: 8px 16px; border-radius: 999px; background: #fff; border: 3px solid var(--line); font-weight: 700; font-size: 1.05rem; }
-.chip.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+.chip.on { background: var(--c, #4dabf7); color: #fff; border-color: var(--ink); transform: scale(1.06); box-shadow: 0 4px 0 rgba(0, 0, 0, .2); }
+.hub.english { --c: #4dabf7; }
+.hub.math { --c: #ff922b; }
+.hub.arabic { --c: #40c057; }
+.hint.start { text-align: start; margin: -4px 0 10px; }
+.selected-topic {
+  margin-top: 14px; padding: 10px 16px; border-radius: 16px; background: #fff; border: 3px dashed var(--c, #4dabf7);
+  font-size: 1.15rem; text-align: center;
+}
+.selected-topic.pulse { animation: bounce .4s; }
+.game-topic { text-align: center; margin: -4px 0 12px; font-weight: 700; color: var(--muted); }
 
 .card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; }
 .btn { padding: 12px 22px; border-radius: 16px; font-weight: 800; font-size: 1.15rem; background: #f1f3f5; box-shadow: 0 4px 0 rgba(0, 0, 0, .1); }
