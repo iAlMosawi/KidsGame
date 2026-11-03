@@ -39,6 +39,18 @@ button:disabled { cursor: not-allowed; }
 
 main { max-width: 960px; margin: 0 auto; padding: 20px 16px 60px; }
 
+/* ---------- Player ---------- */
+.player-btn { font-weight: 800; background: #e7f5ff; padding: 6px 12px; border-radius: 999px; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.name-form { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.name-form input {
+  font: inherit; font-size: 1.6rem; font-weight: 700; text-align: center; padding: 14px; border-radius: 16px;
+  border: 3px solid var(--line); outline: none;
+}
+.name-form input:focus { border-color: var(--primary); }
+.players { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.player-chip { padding: 10px 18px; border-radius: 999px; background: #fff; border: 3px solid var(--line); font-weight: 800; font-size: 1.15rem; }
+.player-chip.on { border-color: var(--primary); background: #e7f5ff; }
+
 /* ---------- Common ---------- */
 .hero { text-align: center; margin: 10px 0 24px; }
 .hero-emoji { font-size: 3rem; }
@@ -203,6 +215,9 @@ h3 { margin: 22px 0 10px; font-size: 1.25rem; }
 
 @media (max-width: 560px) {
   .brand .ar { display: none; }
+  .brand { font-size: 1rem; }
+  .topbar { gap: 6px; padding: 8px 10px; }
+  .stars-total { padding: 6px 10px; font-size: 1rem; }
   .grades { grid-template-columns: repeat(2, 1fr); }
   .games { grid-template-columns: repeat(2, 1fr); }
   .memory { gap: 7px; }

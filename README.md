@@ -9,6 +9,43 @@ Plain HTML/CSS/JavaScript. You don't need to install or build anything.
 
 Pick a grade, then a subject, then a topic (or "All topics"), then a game.
 
+## Links
+- 🎮 Games: https://ialmosawi.github.io/KidsGame/
+- 📊 Admin dashboard: https://ialmosawi.github.io/KidsGame/admin.html
+
+## Players and the admin dashboard
+- Each child types their name before playing. The name shows at the top, and **👤** switches to another child.
+  Names used on a device are listed, so a child can tap their own name next time.
+- Every finished game is saved with the child's name, grade, subject, topic, game, score, stars and time played.
+- `admin.html` shows every child: average score, level, results per subject, minutes played and last played.
+  You can filter by grade, subject and date, and export to CSV.
+  Click a child to see what they're good at, what needs practice, and every game they played.
+- The PIN without a Google Sheet is `1234`. Change `LOCAL_ADMIN_PIN` in `js/config.js`.
+
+## Collect results from all devices (Google Sheet, free, about 5 minutes)
+Without this step, each device only keeps its own results, and the dashboard shows only the device it's opened on.
+To gather results from every phone, tablet and computer in one place:
+
+1. Create a new Google Sheet (for example "Kids Game Results").
+2. In the Sheet, open **Extensions → Apps Script**.
+3. Delete what's there and paste everything from [`apps-script/Code.gs`](apps-script/Code.gs).
+   Change `ADMIN_PIN` at the top to a PIN only you know. Click 💾 **Save**.
+4. Click **Deploy → New deployment**. Under "Select type" (⚙️), choose **Web app**. Then set:
+   - *Execute as*: **Me**
+   - *Who has access*: **Anyone**
+
+   Click **Deploy**, allow the permissions it asks for, and copy the **Web app URL** (it ends in `/exec`).
+5. Open `js/config.js` in this repo and paste the URL: `SHEET_URL: 'https://script.google.com/macros/s/…/exec',`
+   Commit the change. GitHub Pages updates within a minute or two.
+6. Open the admin dashboard and enter the PIN from step 3.
+
+Results now go into the "Results" tab of your Sheet, and the dashboard reads them from there.
+If a device is offline, its results are sent the next time it's online.
+If you later edit `Code.gs`, use **Deploy → Manage deployments → ✏️ → Version: New version** so the same URL keeps working.
+
+> Privacy: store first names only. The game site is public, so don't put anything secret in `js/config.js`.
+> Your admin PIN lives only in the Apps Script, which runs in your Google account.
+
 ## Games
 | Game | What it is |
 |---|---|

@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Dashboard · Learn & Play</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Cairo:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    main { max-width: 1180px; }
+    .admin-top { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+    .admin-top h2 { margin: 0; font-size: 1.8rem; }
+    .source { font-weight: 700; padding: 6px 14px; border-radius: 999px; background: #fff; border: 3px solid var(--line); }
+    .source.cloud { border-color: #74c0fc; background: #e7f5ff; }
+    .source.local { border-color: #ffd43b; background: #fff9db; }
+    .note { background: #fff9db; border: 2px solid #ffe066; border-radius: 14px; padding: 10px 14px; margin-bottom: 14px; }
+    .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+    .filters select, .filters input, .pin-box input {
+      font: inherit; font-weight: 700; padding: 8px 12px; border-radius: 12px; border: 3px solid var(--line); background: #fff;
+    }
+    .filters input { flex: 1; min-width: 160px; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .kpi { background: #fff; border-radius: 18px; padding: 14px 16px; box-shadow: var(--shadow); }
+    .kpi .v { font-size: 2rem; font-weight: 800; line-height: 1.1; }
+    .kpi .l { color: var(--muted); font-weight: 700; }
+    .table-wrap { overflow-x: auto; background: #fff; border-radius: 18px; box-shadow: var(--shadow); }
+    table { width: 100%; border-collapse: collapse; font-size: 1rem; }
+    th, td { padding: 10px 12px; text-align: start; border-bottom: 2px solid #f1f3f5; white-space: nowrap; }
+    th { background: #f8f9fa; cursor: pointer; user-select: none; position: sticky; top: 0; }
+    th.nosort { cursor: default; }
+    tbody tr.click { cursor: pointer; }
+    tbody tr.click:hover { background: #f1f8ff; }
+    .pct { display: inline-flex; align-items: center; gap: 8px; }
+    .meter { width: 70px; height: 10px; border-radius: 99px; background: #f1f3f5; overflow: hidden; }
+    .meter i { display: block; height: 100%; border-radius: 99px; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 99px; font-weight: 800; font-size: .9rem; }
+    .b-ex { background: #d3f9d8; color: #2b8a3e; } .b-vg { background: #e7f5ff; color: #1864ab; }
+    .b-ok { background: #fff3bf; color: #e67700; } .b-low { background: #ffe3e3; color: #c92a2a; }
+    .muted { color: var(--muted); }
+    .empty { padding: 30px; text-align: center; color: var(--muted); }
+    .pin-box { max-width: 380px; margin: 60px auto; text-align: center; }
+    .pin-box input { width: 100%; text-align: center; font-size: 1.6rem; letter-spacing: 6px; margin: 12px 0; }
+    .err { color: var(--bad); font-weight: 700; min-height: 1.5em; }
+    .kid-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 6px 0 14px; }
+    .kid-head h2 { margin: 0; font-size: 2rem; }
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .cols h3, .section h3 { margin: 18px 0 8px; }
+    @media (max-width: 800px) { .cols { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="index.html" style="text-decoration:none;color:inherit">📊 Admin Dashboard</a>
+    <div class="spacer"></div>
+    <a class="btn ghost" href="index.html" style="text-decoration:none">🎮 Games</a>
+  </header>
+  <main id="app"></main>
+
+  <script src="js/config.js"></script>
+  <script src="js/progress.js"></script>
+  <script src="js/util.js"></script>
+  <script>
+  (function () {
+    const esc = U.esc, $app = document.getElementById('app');
+    const SUBJ = { english: '🔤 English', math: '🔢 Math', arabic: '🌙 Arabic' };
+    const GAME = { quiz: '❓ Quiz', time: '⏱️ Time Attack', balloon: '🎈 Balloon Pop', memory: '🃏 Memory', builder: '🧩 Word Builder' };
+    const S = { pin: '', data: [], kid: null, sort: 'last', dir: -1, f: { grade: '', subject: '', q: '', days: '' } };
+
+    /* Percent for one game: right answers out of total when that makes sense, otherwise stars out of 3. */
+    const pct = r => (['quiz', 'balloon', 'builder'].includes(r.game) && +r.total > 0) ? Math.min(1, +r.score / +r.total) : (+r.stars || 0) / 3;
+    const level = p => p >= .9 ? ['Excellent', 'b-ex'] : p >= .75 ? ['Very good', 'b-vg'] : p >= .6 ? ['Good', 'b-ok'] : ['Needs practice', 'b-low'];
+    const pctHTML = p => p == null ? '<span class="muted">—</span>' :
+      `<span class="pct"><span class="meter"><i style="width:${Math.round(p * 100)}%;background:${p >= .75 ? '#40c057' : p >= .6 ? '#fab005' : '#fa5252'}"></i></span>${Math.round(p * 100)}%</span>`;
+    const badge = p => { const [l, c] = level(p); return `<span class="badge ${c}">${l}</span>`; };
+    const avg = rs => rs.length ? rs.reduce((s, r) => s + pct(r), 0) / rs.length : null;
+    const when = iso => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
+    const keyOf = n => String(n || '').trim().toLowerCase();
+
+    /* ---------- Login ---------- */
+    function login(msg = '') {
+      $app.innerHTML = `<form class="card pin-box">
+        <div style="font-size:3rem">🔒</div><h2>Admin PIN</h2>
+        <p class="muted">${Progress.cloud() ? 'Enter the PIN you set in your Google Apps Script.' : 'Enter the admin PIN (see js/config.js).'}</p>
+        <input id="pin" type="password" inputmode="numeric" autocomplete="current-password" required>
+        <div class="err">${esc(msg)}</div>
+        <button class="btn primary" type="submit">Open dashboard</button></form>`;
+      const inp = $app.querySelector('#pin'); inp.focus();
+      $app.querySelector('form').onsubmit = async e => { e.preventDefault(); await unlock(inp.value); };
+    }
+    async function unlock(pin) {
+      try {
+        if (Progress.cloud()) S.data = await Progress.fetchCloud(pin);
+        else { if (pin !== String(CONFIG.LOCAL_ADMIN_PIN)) throw new Error('Wrong PIN'); S.data = Progress.local(); }
+        S.pin = pin;
+        try { sessionStorage.setItem('kg-admin-pin', pin); } catch (e) {}
+        render();
+      } catch (e) {
+        try { sessionStorage.removeItem('kg-admin-pin'); } catch (er) {}
+        login(e.message === 'Wrong PIN' ? 'Wrong PIN, try again.' : 'Could not load results: ' + e.message);
+      }
+    }
+
+    /* ---------- Data helpers ---------- */
+    function filtered() {
+      const { grade, subject, q, days } = S.f, since = days ? Date.now() - days * 864e5 : 0;
+      return S.data.filter(r => r.name &&
+        (!grade || String(r.grade) === grade) && (!subject || r.subject === subject) &&
+        (!q || keyOf(r.name).includes(keyOf(q))) && (!since || new Date(r.time) >= since));
+    }
+    function byKid(rows) {
+      const m = new Map();
+      for (const r of rows) {
+        const k = keyOf(r.name);
+        if (!m.has(k)) m.set(k, { key: k, name: String(r.name).trim(), rows: [] });
+        m.get(k).rows.push(r);
+      }
+      return [...m.values()].map(k => {
+        const rs = k.rows, sub = s => { const x = rs.filter(r => r.subject === s); return x.length ? avg(x) : null; };
+        return Object.assign(k, {
+          games: rs.length, avg: avg(rs), stars: rs.reduce((s, r) => s + (+r.stars || 0), 0),
+          english: sub('english'), math: sub('math'), arabic: sub('arabic'),
+          grades: [...new Set(rs.map(r => +r.grade))].sort().join(', '),
+          last: rs.reduce((a, r) => (r.time > a ? r.time : a), ''),
+          minutes: Math.round(rs.reduce((s, r) => s + (+r.seconds || 0), 0) / 60),
+        });
+      });
+    }
+
+    /* ---------- Overview ---------- */
+    function render() { return S.kid ? kidView() : overview(); }
+
+    function header() {
+      const cloud = Progress.cloud();
+      return `<div class="admin-top"><h2>${S.kid ? '' : 'Kids progress'}</h2>
+        <div class="row" style="margin:0">
+          <span class="source ${cloud ? 'cloud' : 'local'}">${cloud ? '☁️ Google Sheet · all devices' : '📱 This device only'}</span>
+          <button class="btn ghost" id="refresh">🔄 Refresh</button>
+          <button class="btn ghost" id="csv">⬇️ Export CSV</button>
+        </div></div>
+        ${cloud ? '' : `<div class="note">📱 Results are only being saved on <b>this device</b>. To see every child's results from any phone, tablet or computer, connect a free Google Sheet. The steps are in the README, under <b>"Collect results from all devices"</b>.</div>`}`;
+    }
+    function bindHeader() {
+      $app.querySelector('#refresh').onclick = () => unlock(S.pin);
+      $app.querySelector('#csv').onclick = exportCSV;
+    }
+
+    function overview() {
+      const rows = filtered(), kids = byKid(rows);
+      const col = { name: k => k.name.toLowerCase(), games: k => k.games, avg: k => k.avg, stars: k => k.stars, english: k => k.english ?? -1, math: k => k.math ?? -1, arabic: k => k.arabic ?? -1, last: k => k.last, minutes: k => k.minutes };
+      const f = col[S.sort] || col.last;
+      kids.sort((a, b) => (f(a) > f(b) ? 1 : f(a) < f(b) ? -1 : 0) * S.dir);
+      const th = (id, label) => `<th data-s="${id}">${label}${S.sort === id ? (S.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
+      $app.innerHTML = header() + `
+        <div class="filters">
+          <input id="q" placeholder="🔍 Search a name" value="${esc(S.f.q)}" dir="auto">
+          <select id="grade"><option value="">All grades</option>${[1, 2, 3, 4, 5, 6].map(g => `<option value="${g}" ${S.f.grade == g ? 'selected' : ''}>Grade ${g}</option>`).join('')}</select>
+          <select id="subject"><option value="">All subjects</option>${Object.entries(SUBJ).map(([k, v]) => `<option value="${k}" ${S.f.subject === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+          <select id="days"><option value="">All time</option><option value="1" ${S.f.days === '1' ? 'selected' : ''}>Today (24h)</option><option value="7" ${S.f.days === '7' ? 'selected' : ''}>Last 7 days</option><option value="30" ${S.f.days === '30' ? 'selected' : ''}>Last 30 days</option></select>
+        </div>
+        <div class="kpis">
+          <div class="kpi"><div class="v">${kids.length}</div><div class="l">👧🧒 Kids</div></div>
+          <div class="kpi"><div class="v">${rows.length}</div><div class="l">🎮 Games played</div></div>
+          <div class="kpi"><div class="v">${rows.length ? Math.round(avg(rows) * 100) + '%' : '—'}</div><div class="l">📈 Average score</div></div>
+          <div class="kpi"><div class="v">${rows.reduce((s, r) => s + (+r.stars || 0), 0)}</div><div class="l">⭐ Stars earned</div></div>
+        </div>
+        <div class="table-wrap">${kids.length ? `<table><thead><tr>
+          ${th('name', 'Name')}<th class="nosort">Grades</th>${th('games', 'Games')}${th('avg', 'Average')}<th class="nosort">Level</th>
+          ${th('english', 'English')}${th('math', 'Math')}${th('arabic', 'Arabic')}${th('stars', '⭐')}${th('minutes', 'Minutes')}${th('last', 'Last played')}
+        </tr></thead><tbody>${kids.map(k => `<tr class="click" data-k="${esc(k.key)}">
+          <td dir="auto"><b>${esc(k.name)}</b></td><td>${k.grades}</td><td>${k.games}</td><td>${pctHTML(k.avg)}</td><td>${badge(k.avg)}</td>
+          <td>${pctHTML(k.english)}</td><td>${pctHTML(k.math)}</td><td>${pctHTML(k.arabic)}</td><td>${k.stars}</td><td>${k.minutes}</td>
+          <td class="muted">${when(k.last)}</td></tr>`).join('')}</tbody></table>`
+          : `<div class="empty">No results yet. Results appear here after a child finishes a game.</div>`}</div>
+        <p class="muted">Tip: click a child's name to see details. Average = right answers out of total (Quiz, Balloon Pop, Word Builder), or stars out of 3 (Time Attack, Memory).</p>`;
+      bindHeader();
+      const onF = id => { const el = $app.querySelector('#' + id); el.oninput = el.onchange = () => { S.f[id] = el.value; const pos = el.selectionStart; overview(); const n = $app.querySelector('#' + id); n.focus(); if (id === 'q') n.setSelectionRange(pos, pos); }; };
+      ['q', 'grade', 'subject', 'days'].forEach(onF);
+      $app.querySelectorAll('th[data-s]').forEach(t => (t.onclick = () => { const s = t.dataset.s; S.dir = S.sort === s ? -S.dir : (s === 'name' ? 1 : -1); S.sort = s; overview(); }));
+      $app.querySelectorAll('tr.click').forEach(tr => (tr.onclick = () => { S.kid = tr.dataset.k; window.scrollTo(0, 0); render(); }));
+    }
+
+    /* ---------- One child ---------- */
+    function kidView() {
+      const rows = S.data.filter(r => keyOf(r.name) === S.kid).sort((a, b) => (a.time < b.time ? 1 : -1));
+      if (!rows.length) { S.kid = null; return overview(); }
+      const name = String(rows[0].name).trim(), all = avg(rows);
+      // Subject × grade summary
+      const groups = {};
+      rows.forEach(r => { const k = r.subject + '|' + r.grade; (groups[k] = groups[k] || []).push(r); });
+      const sg = Object.entries(groups).map(([k, rs]) => { const [s, g] = k.split('|'); return { s, g: +g, rs, a: avg(rs), best: Math.max(...rs.map(r => +r.stars || 0)) }; })
+        .sort((a, b) => a.s.localeCompare(b.s) || a.g - b.g);
+      // Topics (excluding "all topics")
+      const tp = {};
+      rows.filter(r => r.topic && !/^(All topics|كل الدروس)$/.test(r.topic)).forEach(r => { const k = r.subject + '|' + r.grade + '|' + r.topic; (tp[k] = tp[k] || []).push(r); });
+      const topics = Object.entries(tp).map(([k, rs]) => { const [s, g, t] = k.split('|'); return { s, g, t, rs, a: avg(rs) }; }).sort((a, b) => a.a - b.a);
+      const weak = topics.filter(x => x.a < .6), strong = topics.filter(x => x.a >= .9);
+
+      $app.innerHTML = header() + `
+        <button class="btn ghost" id="backAll">⬅️ All kids</button>
+        <div class="kid-head"><h2 dir="auto">🧒 ${esc(name)}</h2>${badge(all)}</div>
+        <div class="kpis">
+          <div class="kpi"><div class="v">${rows.length}</div><div class="l">🎮 Games played</div></div>
+          <div class="kpi"><div class="v">${Math.round(all * 100)}%</div><div class="l">📈 Average score</div></div>
+          <div class="kpi"><div class="v">${rows.reduce((s, r) => s + (+r.stars || 0), 0)}</div><div class="l">⭐ Stars earned</div></div>
+          <div class="kpi"><div class="v">${Math.round(rows.reduce((s, r) => s + (+r.seconds || 0), 0) / 60)}</div><div class="l">⏱️ Minutes played</div></div>
+        </div>
+        <div class="cols">
+          <div><h3>💪 Needs practice (below 60%)</h3>${weak.length ? `<div class="chips">${weak.map(x => `<span class="chip" dir="auto">${SUBJ[x.s] || x.s} G${x.g}: ${esc(x.t)} · ${Math.round(x.a * 100)}%</span>`).join('')}</div>` : '<p class="muted">Nothing yet 🎉</p>'}</div>
+          <div><h3>🏆 Strong topics (90%+)</h3>${strong.length ? `<div class="chips">${strong.map(x => `<span class="chip" dir="auto">${SUBJ[x.s] || x.s} G${x.g}: ${esc(x.t)} · ${Math.round(x.a * 100)}%</span>`).join('')}</div>` : '<p class="muted">Keep playing to find out!</p>'}</div>
+        </div>
+        <div class="section"><h3>📚 By subject and grade</h3><div class="table-wrap"><table><thead><tr>
+          <th class="nosort">Subject</th><th class="nosort">Grade</th><th class="nosort">Games</th><th class="nosort">Average</th><th class="nosort">Level</th><th class="nosort">Best stars</th></tr></thead>
+          <tbody>${sg.map(x => `<tr><td>${SUBJ[x.s] || esc(x.s)}</td><td>Grade ${x.g}</td><td>${x.rs.length}</td><td>${pctHTML(x.a)}</td><td>${badge(x.a)}</td><td>${'★'.repeat(x.best)}${'☆'.repeat(3 - x.best)}</td></tr>`).join('')}</tbody></table></div></div>
+        <div class="section"><h3>🕒 All games (newest first)</h3><div class="table-wrap"><table><thead><tr>
+          <th class="nosort">When</th><th class="nosort">Subject</th><th class="nosort">Grade</th><th class="nosort">Topic</th><th class="nosort">Game</th><th class="nosort">Score</th><th class="nosort">Result</th><th class="nosort">Stars</th><th class="nosort">Time</th></tr></thead>
+          <tbody>${rows.map(r => `<tr><td class="muted">${when(r.time)}</td><td>${SUBJ[r.subject] || esc(r.subject)}</td><td>${esc(r.grade)}</td><td dir="auto">${esc(r.topic || '')}</td>
+            <td>${GAME[r.game] || esc(r.game)}</td><td>${esc(r.score)}${r.total !== '' && r.total != null ? ' / ' + esc(r.total) : ''}</td><td>${pctHTML(pct(r))}</td>
+            <td>${'★'.repeat(+r.stars || 0)}${'☆'.repeat(3 - (+r.stars || 0))}</td><td class="muted">${Math.round((+r.seconds || 0) / 6) / 10} min</td></tr>`).join('')}</tbody></table></div></div>`;
+      bindHeader();
+      $app.querySelector('#backAll').onclick = () => { S.kid = null; render(); };
+    }
+
+    function exportCSV() {
+      const rows = S.kid ? S.data.filter(r => keyOf(r.name) === S.kid) : filtered();
+      const cols = ['time', 'name', 'grade', 'subject', 'topic', 'game', 'score', 'total', 'stars', 'seconds'];
+      const cell = v => { v = String(v ?? ''); if (/^[=+\-@]/.test(v)) v = "'" + v; return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+      const csv = '﻿' + [cols.concat('percent').join(',')].concat(rows.map(r => cols.map(c => cell(r[c])).concat(Math.round(pct(r) * 100)).join(','))).join('\n');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      a.download = 'kids-progress-' + new Date().toISOString().slice(0, 10) + '.csv';
+      a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
+    let saved = ''; try { saved = sessionStorage.getItem('kg-admin-pin') || ''; } catch (e) {}
+    if (saved) unlock(saved); else login();
+  })();
+  </script>
+</body>
+</html>

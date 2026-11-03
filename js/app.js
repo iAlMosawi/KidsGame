@@ -28,10 +28,16 @@
   const GRADE_ANIMALS = ['🐣', '🐰', '🦊', '🐼', '🦁', '🦉'];
 
   /* ---- Saved stars (best per grade/subject/game/topic) ---- */
-  const KEY = 'kids-games-stars-v1';
-  const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } };
-  const save = (d) => { try { localStorage.setItem(KEY, JSON.stringify(d)); } catch (e) { /* private mode */ } };
+  // Stars are kept separately for each player on this device.
+  const KEY = () => 'kids-games-stars-v1:' + Progress.player().toLowerCase();
+  const load = () => { try { return JSON.parse(localStorage.getItem(KEY())) || {}; } catch (e) { return {}; } };
+  const save = (d) => { try { localStorage.setItem(KEY(), JSON.stringify(d)); } catch (e) { /* private mode */ } };
   let stars = load();
+  const updatePlayer = () => {
+    const n = Progress.player();
+    document.getElementById('playerName').textContent = n || '?';
+    stars = load(); updateTotal();
+  };
   const sumStars = (prefix = '') => Object.entries(stars).filter(([k]) => k.startsWith(prefix)).reduce((s, [, v]) => s + v, 0);
   const updateTotal = () => { document.getElementById('starTotal').textContent = sumStars(); };
 
@@ -56,7 +62,8 @@
     render();
   }
   document.getElementById('backBtn').onclick = back;
-  document.getElementById('homeBtn').onclick = () => { history.length = 0; go('home', {}, false); };
+  document.getElementById('homeBtn').onclick = () => { history.length = 0; go(Progress.player() ? 'home' : 'player', {}, false); };
+  document.getElementById('playerBtn').onclick = () => { history.length = 0; go('player', {}, false); };
   const soundBtn = document.getElementById('soundBtn');
   soundBtn.onclick = () => { Sound.on = !Sound.on; soundBtn.textContent = Sound.on ? '🔊' : '🔇'; };
 
@@ -80,11 +87,32 @@
   }
 
   /* ---------- Screens ---------- */
+  function player() {
+    const known = Progress.players(), cur = Progress.player();
+    $app.innerHTML = `
+      <section class="hero">
+        <div class="hero-emoji">👋</div>
+        <h2>What is your name? <span class="ar">ما اسمك؟</span></h2>
+        <p>Type your name to start playing · اكتبْ اسمك لتبدأ اللعب</p>
+      </section>
+      <form class="card name-form">
+        <input id="nameInput" maxlength="30" autocomplete="off" placeholder="Your name · اسمك" value="${esc(cur)}" dir="auto" required>
+        <button class="btn primary" type="submit">Let's play! · هيا نلعب ▶</button>
+      </form>
+      ${known.length ? `<h3 class="center">Or choose your name · أو اخترْ اسمك</h3>
+      <div class="players">${known.map(n => `<button class="player-chip ${n === cur ? 'on' : ''}" data-n="${esc(n)}" dir="auto">🙂 ${esc(n)}</button>`).join('')}</div>` : ''}`;
+    const input = $app.querySelector('#nameInput');
+    if (!cur) input.focus();
+    const start = (n) => { if (!Progress.cleanName(n)) return input.focus(); Progress.setPlayer(n); updatePlayer(); history.length = 0; go('home', {}, false); };
+    $app.querySelector('form').onsubmit = (e) => { e.preventDefault(); start(input.value); };
+    $app.querySelectorAll('.player-chip').forEach(b => (b.onclick = () => start(b.dataset.n)));
+  }
+
   function home() {
     $app.innerHTML = `
       <section class="hero">
         <div class="hero-emoji">🎒📚✏️</div>
-        <h2>Learn & Play!  <span class="ar">تعلّم والعب!</span></h2>
+        <h2>Hi ${esc(Progress.player())}! <span class="ar">أهلاً ${esc(Progress.player())}!</span></h2>
         <p>Choose your grade to start · اخترْ صفَّك للبدء</p>
       </section>
       <div class="grid grades">${[1, 2, 3, 4, 5, 6].map(g => `
@@ -170,13 +198,21 @@
       }
       return out;
     };
-    const [name] = t('games')[g.id];
+    const [name] = t('games')[g.id], started = Date.now();
     $app.innerHTML = `<div class="game-wrap ${s.id}" ${s.rtl ? 'dir="rtl" lang="ar"' : ''}>
       <h2 class="screen-title small">${g.icon} ${name}</h2><p class="game-topic">🎯 ${esc(topicName())}</p><div class="game-root"></div></div>`;
     g.run({
       root: $app.querySelector('.game-root'), gen, pairs, words: gd.words || [], lang: s.lang, grade: state.grade, t,
       alive: () => state.runId === runId && state.screen === 'game',
-      end: (res) => { if (state.runId === runId) go('result', { result: res }); },
+      end: (res) => {
+        if (state.runId !== runId) return;
+        Progress.add({
+          name: Progress.player(), grade: state.grade, subject: state.subject, topic: topicName(), topicId: state.topic,
+          game: g.id, score: res.score, total: res.total == null ? '' : res.total, stars: res.stars,
+          seconds: Math.round((Date.now() - started) / 1000),
+        });
+        go('result', { result: res });
+      },
     });
   }
 
@@ -213,10 +249,12 @@
   }
 
   function render() {
-    document.getElementById('backBtn').hidden = state.screen === 'home';
-    ({ home, subjects, hub, game, result })[state.screen]();
+    document.getElementById('backBtn').hidden = state.screen === 'home' || state.screen === 'player';
+    ({ player, home, subjects, hub, game, result })[state.screen]();
   }
 
-  updateTotal();
+  if (!Progress.player()) state.screen = 'player';
+  updatePlayer();
   render();
+  Progress.flush();
 })();
