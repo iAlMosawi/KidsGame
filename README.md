@@ -23,6 +23,10 @@ Pick a grade, then a subject, then a topic (or "All topics"), then a game.
 - The admin PIN is `201819`. Change `LOCAL_ADMIN_PIN` in `js/config.js` (and `ADMIN_PIN` in `apps-script/Code.gs` if you use a Google Sheet).
 
 ## Collect results from all devices (Google Sheet, free, about 5 minutes)
+
+> ✅ **Connected.** `js/config.js` holds this project's Sheet URL, so results from every device already go to the Sheet.
+> Follow the steps below only if you ever want to use a different Sheet.
+
 Without this step, each device only keeps its own results, and the dashboard shows only the device it's opened on.
 To gather results from every phone, tablet and computer in one place:
 
