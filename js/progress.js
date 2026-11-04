@@ -9,7 +9,14 @@ const Progress = (() => {
 
   async function flush() {
     if (!cloud()) return;
-    const q = get(QUEUE, []);
+    // First time this device sees the Sheet: also send results played before it was connected.
+    const BF = 'kids-games-backfilled:' + CONFIG.SHEET_URL;
+    if (!get(BF, false)) {
+      const q0 = get(QUEUE, []), ids = new Set(q0.map(x => x.id));
+      set(QUEUE, q0.concat(get(RES, []).filter(r => !ids.has(r.id))));
+      set(BF, true);
+    }
+    const q = get(QUEUE, []).slice(0, 200);
     if (!q.length) return;
     try {
       // text/plain avoids a CORS preflight, which Apps Script does not answer.

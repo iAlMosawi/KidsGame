@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Cairo:wght@500;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261103b">
+  <link rel="stylesheet" href="css/style.css?v=20261104a">
   <style>
     main { max-width: 1180px; }
     .admin-top { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
@@ -44,6 +44,13 @@
     .empty { padding: 30px; text-align: center; color: var(--muted); }
     .pin-box { max-width: 380px; margin: 60px auto; text-align: center; }
     .pin-box input { width: 100%; text-align: center; font-size: 1.6rem; letter-spacing: 6px; margin: 12px 0; }
+    .setup { background: #fff9db; border: 2px solid #ffe066; border-radius: 14px; padding: 10px 14px; margin-bottom: 14px; }
+    .setup summary { cursor: pointer; font-size: 1.05rem; }
+    .setup ol { padding-inline-start: 22px; } .setup li { margin: 10px 0; line-height: 1.5; }
+    .setup input { flex: 1; min-width: 240px; font: inherit; padding: 8px 12px; border-radius: 12px; border: 3px solid var(--line); }
+    .setup code { background: #fff; padding: 2px 6px; border-radius: 6px; word-break: break-all; }
+    .setup .btn { font-size: .95rem; padding: 6px 12px; }
+    .test-msg { margin-top: 6px; font-weight: 700; }
     .updated { margin: -6px 0 12px; min-height: 1.4em; }
     .flash { color: #2b8a3e; margin-inline-start: 8px; animation: bounce .4s; }
     .err { color: var(--bad); font-weight: 700; min-height: 1.5em; }
@@ -62,9 +69,9 @@
   </header>
   <main id="app"></main>
 
-  <script src="js/config.js?v=20261103b"></script>
-  <script src="js/progress.js?v=20261103b"></script>
-  <script src="js/util.js?v=20261103b"></script>
+  <script src="js/config.js?v=20261104a"></script>
+  <script src="js/progress.js?v=20261104a"></script>
+  <script src="js/util.js?v=20261104a"></script>
   <script>
   (function () {
     const esc = U.esc, $app = document.getElementById('app');
@@ -151,9 +158,68 @@
         </div></div>
         <p class="updated muted">${S.updated ? 'Last updated ' + S.updated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' · updates automatically every 30 seconds' : ''}
           ${S.msg ? `<b class="flash">${esc(S.msg)}</b>` : ''}</p>
-        ${cloud ? '' : `<div class="note">📱 Results are only being saved on <b>this device</b>. To see every child's results from any phone, tablet or computer, connect a free Google Sheet. The steps are in the README, under <b>"Collect results from all devices"</b>.</div>`}`;
+        ${cloud ? '' : setupHTML()}`;
     }
+    /* ---------- Guided setup for syncing all devices ---------- */
+    const EDIT_URL = 'https://github.com/iAlMosawi/KidsGame/edit/claude/modest-thompson-sdctsp/js/config.js';
+    function setupHTML() {
+      return `<details class="setup" ${S.setupOpen ? 'open' : ''}><summary>📱➡️☁️ <b>Results are saved on this device only.</b> Click here to sync every PC, laptop and phone (free, about 5 minutes)</summary>
+        <ol>
+          <li>Open <a href="https://sheets.new" target="_blank" rel="noopener">sheets.new</a> to create a new Google Sheet. Name it, for example, <b>Kids Game Results</b>.</li>
+          <li>In the Sheet, click <b>Extensions → Apps Script</b>. Delete everything in the editor, then
+            <button class="btn ghost" id="copyCode" type="button">📋 Copy the code</button> and paste it in. Click 💾 <b>Save</b>.
+            <br><span class="muted">The admin PIN in this code is <b>${esc(S.pin)}</b>.</span></li>
+          <li>Click <b>Deploy → New deployment</b>. Click ⚙️ next to "Select type" and choose <b>Web app</b>. Set
+            <b>Execute as: Me</b> and <b>Who has access: Anyone</b>, then click <b>Deploy</b>.
+            Google asks for permission: choose your account → <b>Advanced</b> → <b>Go to … (unsafe)</b> → <b>Allow</b>. This is your own script, so it's safe.</li>
+          <li>Copy the <b>Web app URL</b> (it ends with <code>/exec</code>), paste it here and test it:
+            <div class="row" style="justify-content:flex-start"><input id="sheetUrl" placeholder="https://script.google.com/macros/s/…/exec" value="${esc(S.testUrl || '')}">
+            <button class="btn primary" id="testUrl" type="button">Test connection</button></div>
+            <div class="test-msg">${S.testMsg || ''}</div></li>
+          <li>Last step, which turns syncing on for every device: open <a href="${EDIT_URL}" target="_blank" rel="noopener">js/config.js on GitHub ✏️</a>,
+            replace <code>SHEET_URL: ''</code> with the line below, and click <b>Commit changes</b>. You can also send the URL to Claude to do it for you.
+            <div class="row" style="justify-content:flex-start"><code class="line" id="cfgLine">SHEET_URL: '${esc(S.testUrl || 'paste-your-url-here')}',</code>
+            <button class="btn ghost" id="copyLine" type="button">📋 Copy line</button></div></li>
+        </ol>
+        <p class="muted">After 1–2 minutes, every device that opens the games sends results to your Sheet, including games already played on that device, and this dashboard shows them all.</p></details>`;
+    }
+    const copy = async (text, btn) => {
+      try { await navigator.clipboard.writeText(text); }
+      catch (e) { const t = document.createElement('textarea'); t.value = text; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+      const old = btn.textContent; btn.textContent = '✅ Copied!'; setTimeout(() => (btn.textContent = old), 1500);
+    };
+    function bindSetup() {
+      const d = $app.querySelector('details.setup'); if (!d) return;
+      d.ontoggle = () => (S.setupOpen = d.open);
+      $app.querySelector('#copyCode').onclick = async e => {
+        const btn = e.currentTarget;
+        try {
+          let code = await (await fetch('apps-script/Code.gs?v=' + Date.now())).text();
+          code = code.replace(/const ADMIN_PIN = '[^']*';/, "const ADMIN_PIN = '" + S.pin.replace(/'/g, '') + "';");
+          copy(code, btn);
+        } catch (er) { btn.textContent = '⚠️ Open apps-script/Code.gs on GitHub instead'; }
+      };
+      $app.querySelector('#copyLine').onclick = e => copy($app.querySelector('#cfgLine').textContent, e.currentTarget);
+      const inp = $app.querySelector('#sheetUrl');
+      inp.oninput = () => { S.testUrl = inp.value.trim(); $app.querySelector('#cfgLine').textContent = `SHEET_URL: '${S.testUrl || 'paste-your-url-here'}',`; };
+      $app.querySelector('#testUrl').onclick = async () => {
+        const url = inp.value.trim(); S.testUrl = url;
+        const msg = $app.querySelector('.test-msg');
+        if (!/^https:\/\/script\.google(usercontent)?\.com\/.+\/exec$/.test(url)) { msg.innerHTML = '⚠️ That doesn\'t look right. It should start with <code>https://script.google.com/macros/s/</code> and end with <code>/exec</code>.'; return; }
+        msg.textContent = '⏳ Testing…';
+        try {
+          const j = await (await fetch(url + '?pin=' + encodeURIComponent(S.pin))).json();
+          S.testMsg = j.ok ? `✅ It works! Your Sheet has ${j.results.length} result(s). Now do the last step below.`
+            : (j.error === 'Wrong PIN' ? '⚠️ Connected, but the PIN in the script is different from the one you used here. Make them match (ADMIN_PIN in the script), then use Deploy → Manage deployments → ✏️ → New version.' : '⚠️ ' + esc(j.error || 'Unknown error'));
+        } catch (er) {
+          S.testMsg = '⚠️ Could not connect. Check that "Who has access" is set to <b>Anyone</b> and that you copied the <b>Web app</b> URL.';
+        }
+        msg.innerHTML = S.testMsg;
+      };
+    }
+
     function bindHeader() {
+      bindSetup();
       $app.querySelector('#refresh').onclick = () => refresh(true);
       $app.querySelector('#csv').onclick = exportCSV;
     }
@@ -248,7 +314,7 @@
     /* Reload results without leaving the current view. Typing in the search box is never interrupted. */
     async function refresh(manual) {
       if (!S.pin || S.busy) return;
-      const typing = document.activeElement && document.activeElement.id === 'q';
+      const typing = document.activeElement && document.activeElement.tagName === 'INPUT';
       if (!manual && typing) return;
       S.busy = true; if (manual) render();
       const y = window.scrollY;
