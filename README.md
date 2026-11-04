@@ -46,6 +46,24 @@ If you later edit `Code.gs`, use **Deploy → Manage deployments → ✏️ → 
 > Privacy: store first names only. The game site is public, so don't put anything secret in `js/config.js`.
 > Your admin PIN lives only in the Apps Script, which runs in your Google account.
 
+## What kids get
+- **Name, animal avatar and class.** Kids pick an animal and can enter their class (e.g. `3A`).
+- **Explanations.** A wrong answer shows *why* (for example "7 × 8 means 8 groups of 7…") and waits for **Next ▶**.
+- **Practice my mistakes ♻️.** Every missed question is saved and comes back until the child gets it right.
+  When there are no saved mistakes, it practises the child's weak topics (below 60%).
+- **Daily Challenge 📅.** 5 mixed questions a day from the child's grade, with a 🔥 day streak.
+- **Levels and 17 badges 🏅.** A level goes up every 15 stars. Badges include first game, 3 days in a row, times-table master, homework done, fixed 10 mistakes and more.
+- **Homework 📌.** Homework assigned in the admin dashboard shows on the home screen, with a ✅ when done.
+- **Leaderboard 🏆** (optional; the admin switches it on). Shows this week's stars, for everyone or just the child's class.
+
+## Admin dashboard extras
+- Filter by **class**, and see each child's class and avatar.
+- **Homework.** Choose grade, subject, topic, game, class, due date and a note. See who finished it.
+- **Settings.** Turn the kids' leaderboard on or off.
+- **🖨️ Weekly report for parents.** One click per child gives a printable page (or *Save as PDF*).
+- Without a Google Sheet, homework and settings only apply to the same browser. With the Sheet, they reach every device.
+  **If you set up the Sheet before this update, paste the new `apps-script/Code.gs`, then use Deploy → Manage deployments → ✏️ → New version.**
+
 ## Games
 | Game | What it is |
 |---|---|
@@ -54,6 +72,7 @@ If you later edit `Code.gs`, use **Deploy → Manage deployments → ✏️ → 
 | 🎈 Balloon Pop | Pop the balloon with the right answer before it floats away (3 lives) |
 | 🃏 Memory Match | Flip cards to match pairs (word ↔ picture, sum ↔ answer, …) |
 | 🧩 Word Builder | Spell the pictured word with letter tiles (English & Arabic) |
+| 🔀 Put in Order | Drag (or tap) words into a sentence, or numbers from smallest to biggest |
 
 Each game gives up to 3 stars. The best stars are saved in your browser.
 Questions with a 🔈 button can be read aloud (this uses the browser's built-in text-to-speech).
@@ -61,12 +80,17 @@ Questions with a 🔈 button can be read aloud (this uses the browser's built-in
 ## Topics by grade
 | Grade | English | Math | Arabic |
 |---|---|---|---|
-| 1 | Picture words, first letter, rhymes | Add/subtract to 20, counting, compare | الحرف الأول، أسماء الحروف، صورة وكلمة |
-| 2 | Missing letter, plurals, opposites | Add/subtract to 100, tens & ones, skip counting, even/odd | الحرف الناقص، الأضداد، المثنى |
-| 3 | Synonyms, past tense, nouns/verbs/adjectives | Times tables, division, to 1000, fractions of a number | الجمع، المذكر والمؤنث، الأضداد |
-| 4 | Homophones, compound words, irregular plurals | Big multiplication, long division, rounding, perimeter, equivalent fractions | أنواع الكلمة، أزمنة الفعل، المرادفات |
-| 5 | Prefixes & suffixes, antonyms, parts of speech | Decimals, adding fractions, 2-digit × 2-digit, area, order of operations | أنواع الجمع، الضمائر، حروف الجر |
-| 6 | Idioms, analogies, verb tenses | Percentages, negative numbers, exponents, equations, GCF, ratios | الفاعل والمفعول به، كان وإنّ وأخواتهما، المبتدأ والخبر |
+| 1 | Picture words, first letter, rhymes, listening, reading | Add/subtract to 20, counting, compare, shapes, o'clock, word problems | الحرف الأول، أسماء الحروف، صورة وكلمة، الحركات، استمع واختر |
+| 2 | Missing letter, plurals, opposites, listening, reading | Add/subtract to 100, tens & ones, skip counting, even/odd, half past, money, shapes, word problems | الحرف الناقص، الأضداد، المثنى، الحركات والسكون، التنوين، الشدة، القراءة |
+| 3 | Synonyms, past tense, nouns/verbs/adjectives, listening, reading | Times tables, division, to 1000, fractions, quarter past/to, money, shapes, word problems | الجمع، المذكر والمؤنث، الأضداد، التنوين، القراءة |
+| 4 | Homophones, compound words, irregular plurals, reading | Big multiplication, long division, rounding, perimeter, equivalent fractions, 5-minute clocks, word problems | أنواع الكلمة، أزمنة الفعل، المرادفات، القراءة |
+| 5 | Prefixes & suffixes, antonyms, parts of speech, reading | Decimals, adding fractions, 2-digit × 2-digit, area, order of operations, word problems | أنواع الجمع، الضمائر، حروف الجر، القراءة |
+| 6 | Idioms, analogies, verb tenses, reading | Percentages, negative numbers, exponents, equations, GCF, ratios, word problems | الفاعل والمفعول به، كان وإنّ وأخواتهما، المبتدأ والخبر، القراءة |
+
+Word problems appear in both English and Arabic. Every topic shows an explanation after a wrong answer.
+
+**Arabic voice:** many devices have no Arabic voice, so Arabic can't be read aloud on them, and the "استمع واختر"
+topic is hidden there. To make it work everywhere, add recordings as described in [`audio/README.md`](audio/README.md).
 
 ## Adding content
 All content is in `js/data/english.js`, `js/data/math.js` and `js/data/arabic.js`.

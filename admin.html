@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Cairo:wght@500;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=20261104a">
+  <link rel="stylesheet" href="css/style.css?v=20261104c">
   <style>
     main { max-width: 1180px; }
     .admin-top { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
@@ -51,6 +51,10 @@
     .setup code { background: #fff; padding: 2px 6px; border-radius: 6px; word-break: break-all; }
     .setup .btn { font-size: .95rem; padding: 6px 12px; }
     .test-msg { margin-top: 6px; font-weight: 700; }
+    .hw-form { margin-top: 12px; }
+    .switch { display: flex; gap: 10px; align-items: center; font-size: 1.1rem; cursor: pointer; }
+    .switch input { width: 22px; height: 22px; }
+    .small { font-size: .9rem; }
     .updated { margin: -6px 0 12px; min-height: 1.4em; }
     .flash { color: #2b8a3e; margin-inline-start: 8px; animation: bounce .4s; }
     .err { color: var(--bad); font-weight: 700; min-height: 1.5em; }
@@ -69,18 +73,21 @@
   </header>
   <main id="app"></main>
 
-  <script src="js/config.js?v=20261104a"></script>
-  <script src="js/progress.js?v=20261104a"></script>
-  <script src="js/util.js?v=20261104a"></script>
+  <script src="js/config.js?v=20261104c"></script>
+  <script src="js/progress.js?v=20261104c"></script>
+  <script src="js/util.js?v=20261104c"></script>
+  <script src="js/data/english.js?v=20261104c"></script>
+  <script src="js/data/math.js?v=20261104c"></script>
+  <script src="js/data/arabic.js?v=20261104c"></script>
   <script>
   (function () {
     const esc = U.esc, $app = document.getElementById('app');
-    const SUBJ = { english: '🔤 English', math: '🔢 Math', arabic: '🌙 Arabic' };
-    const GAME = { quiz: '❓ Quiz', time: '⏱️ Time Attack', balloon: '🎈 Balloon Pop', memory: '🃏 Memory', builder: '🧩 Word Builder' };
-    const S = { updated: null, msg: '', busy: false, pin: '', data: [], kid: null, sort: 'last', dir: -1, f: { grade: '', subject: '', q: '', days: '' } };
+    const SUBJ = { english: '🔤 English', math: '🔢 Math', arabic: '🌙 Arabic', mixed: '🎲 Mixed' };
+    const GAME = { quiz: '❓ Quiz', time: '⏱️ Time Attack', balloon: '🎈 Balloon Pop', memory: '🃏 Memory', builder: '🧩 Word Builder', order: '🔀 Put in Order', practice: '♻️ Practice', daily: '📅 Daily Challenge' };
+    const S = { updated: null, msg: '', busy: false, pin: '', data: [], settings: { leaderboard: false, homework: [] }, kid: null, sort: 'last', dir: -1, f: { grade: '', subject: '', q: '', days: '', cls: '' } };
 
     /* Percent for one game: right answers out of total when that makes sense, otherwise stars out of 3. */
-    const pct = r => (['quiz', 'balloon', 'builder'].includes(r.game) && +r.total > 0) ? Math.min(1, +r.score / +r.total) : (+r.stars || 0) / 3;
+    const pct = r => (['quiz', 'balloon', 'builder', 'order', 'practice', 'daily'].includes(r.game) && +r.total > 0) ? Math.min(1, +r.score / +r.total) : (+r.stars || 0) / 3;
     const level = p => p >= .9 ? ['Excellent', 'b-ex'] : p >= .75 ? ['Very good', 'b-vg'] : p >= .6 ? ['Good', 'b-ok'] : ['Needs practice', 'b-low'];
     const pctHTML = p => p == null ? '<span class="muted">—</span>' :
       `<span class="pct"><span class="meter"><i style="width:${Math.round(p * 100)}%;background:${p >= .75 ? '#40c057' : p >= .6 ? '#fab005' : '#fa5252'}"></i></span>${Math.round(p * 100)}%</span>`;
@@ -104,8 +111,8 @@
     async function unlock(pin, refresh = false) {
       try {
         const before = S.data.length;
-        if (Progress.cloud()) S.data = await Progress.fetchCloud(pin);
-        else { if (String(pin).trim() !== String(CONFIG.LOCAL_ADMIN_PIN).trim()) throw new Error('Wrong PIN'); S.data = Progress.local(); }
+        if (Progress.cloud()) { const d = await Progress.fetchCloud(pin); S.data = d.results; S.settings = Object.assign({ leaderboard: false, homework: [] }, d.settings); }
+        else { if (String(pin).trim() !== String(CONFIG.LOCAL_ADMIN_PIN).trim()) throw new Error('Wrong PIN'); S.data = Progress.local(); S.settings = Progress.settings(); }
         S.pin = pin;
         const added = S.data.length - before;
         S.updated = new Date();
@@ -121,8 +128,8 @@
 
     /* ---------- Data helpers ---------- */
     function filtered() {
-      const { grade, subject, q, days } = S.f, since = days ? Date.now() - days * 864e5 : 0;
-      return S.data.filter(r => r.name &&
+      const { grade, subject, q, days, cls } = S.f, since = days ? Date.now() - days * 864e5 : 0;
+      return S.data.filter(r => r.name && (!cls || String(r.cls || '') === cls) &&
         (!grade || String(r.grade) === grade) && (!subject || r.subject === subject) &&
         (!q || keyOf(r.name).includes(keyOf(q))) && (!since || new Date(r.time) >= since));
     }
@@ -138,7 +145,9 @@
         return Object.assign(k, {
           games: rs.length, avg: avg(rs), stars: rs.reduce((s, r) => s + (+r.stars || 0), 0),
           english: sub('english'), math: sub('math'), arabic: sub('arabic'),
-          grades: [...new Set(rs.map(r => +r.grade))].sort().join(', '),
+          grades: [...new Set(rs.map(r => +r.grade).filter(Boolean))].sort().join(', '),
+          cls: (rs.slice().sort((a, b) => (a.time < b.time ? 1 : -1)).find(r => r.cls) || {}).cls || '',
+          avatar: (rs.slice().sort((a, b) => (a.time < b.time ? 1 : -1)).find(r => r.avatar) || {}).avatar || '🧒',
           last: rs.reduce((a, r) => (r.time > a ? r.time : a), ''),
           minutes: Math.round(rs.reduce((s, r) => s + (+r.seconds || 0), 0) / 60),
         });
@@ -226,7 +235,7 @@
 
     function overview() {
       const rows = filtered(), kids = byKid(rows);
-      const col = { name: k => k.name.toLowerCase(), games: k => k.games, avg: k => k.avg, stars: k => k.stars, english: k => k.english ?? -1, math: k => k.math ?? -1, arabic: k => k.arabic ?? -1, last: k => k.last, minutes: k => k.minutes };
+      const col = { cls: k => k.cls, name: k => k.name.toLowerCase(), games: k => k.games, avg: k => k.avg, stars: k => k.stars, english: k => k.english ?? -1, math: k => k.math ?? -1, arabic: k => k.arabic ?? -1, last: k => k.last, minutes: k => k.minutes };
       const f = col[S.sort] || col.last;
       kids.sort((a, b) => (f(a) > f(b) ? 1 : f(a) < f(b) ? -1 : 0) * S.dir);
       const th = (id, label) => `<th data-s="${id}">${label}${S.sort === id ? (S.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
@@ -235,6 +244,7 @@
           <input id="q" placeholder="🔍 Search a name" value="${esc(S.f.q)}" dir="auto">
           <select id="grade"><option value="">All grades</option>${[1, 2, 3, 4, 5, 6].map(g => `<option value="${g}" ${S.f.grade == g ? 'selected' : ''}>Grade ${g}</option>`).join('')}</select>
           <select id="subject"><option value="">All subjects</option>${Object.entries(SUBJ).map(([k, v]) => `<option value="${k}" ${S.f.subject === k ? 'selected' : ''}>${v}</option>`).join('')}</select>
+          <select id="cls"><option value="">All classes</option>${classes().map(c => `<option value="${esc(c)}" ${S.f.cls === c ? 'selected' : ''}>Class ${esc(c)}</option>`).join('')}</select>
           <select id="days"><option value="">All time</option><option value="1" ${S.f.days === '1' ? 'selected' : ''}>Today (24h)</option><option value="7" ${S.f.days === '7' ? 'selected' : ''}>Last 7 days</option><option value="30" ${S.f.days === '30' ? 'selected' : ''}>Last 30 days</option></select>
         </div>
         <div class="kpis">
@@ -244,17 +254,20 @@
           <div class="kpi"><div class="v">${rows.reduce((s, r) => s + (+r.stars || 0), 0)}</div><div class="l">⭐ Stars earned</div></div>
         </div>
         <div class="table-wrap">${kids.length ? `<table><thead><tr>
-          ${th('name', 'Name')}<th class="nosort">Grades</th>${th('games', 'Games')}${th('avg', 'Average')}<th class="nosort">Level</th>
+          ${th('name', 'Name')}${th('cls', 'Class')}<th class="nosort">Grades</th>${th('games', 'Games')}${th('avg', 'Average')}<th class="nosort">Level</th>
           ${th('english', 'English')}${th('math', 'Math')}${th('arabic', 'Arabic')}${th('stars', '⭐')}${th('minutes', 'Minutes')}${th('last', 'Last played')}
         </tr></thead><tbody>${kids.map(k => `<tr class="click" data-k="${esc(k.key)}">
-          <td dir="auto"><b>${esc(k.name)}</b></td><td>${k.grades}</td><td>${k.games}</td><td>${pctHTML(k.avg)}</td><td>${badge(k.avg)}</td>
+          <td dir="auto"><b>${k.avatar} ${esc(k.name)}</b></td><td>${esc(k.cls) || '<span class="muted">—</span>'}</td><td>${k.grades}</td><td>${k.games}</td><td>${pctHTML(k.avg)}</td><td>${badge(k.avg)}</td>
           <td>${pctHTML(k.english)}</td><td>${pctHTML(k.math)}</td><td>${pctHTML(k.arabic)}</td><td>${k.stars}</td><td>${k.minutes}</td>
           <td class="muted">${when(k.last)}</td></tr>`).join('')}</tbody></table>`
           : `<div class="empty">No results yet. Results appear here after a child finishes a game.</div>`}</div>
-        <p class="muted">Tip: click a child's name to see details. Average = right answers out of total (Quiz, Balloon Pop, Word Builder), or stars out of 3 (Time Attack, Memory).</p>`;
+        <p class="muted">Tip: click a child's name to see details. Average = right answers out of total (Quiz, Balloon Pop, Word Builder, Put in Order, Practice, Daily), or stars out of 3 (Time Attack, Memory).</p>
+        ${homeworkHTML()}
+        ${settingsHTML()}`;
       bindHeader();
       const onF = id => { const el = $app.querySelector('#' + id); el.oninput = el.onchange = () => { S.f[id] = el.value; const pos = el.selectionStart; overview(); const n = $app.querySelector('#' + id); n.focus(); if (id === 'q') n.setSelectionRange(pos, pos); }; };
-      ['q', 'grade', 'subject', 'days'].forEach(onF);
+      ['q', 'grade', 'subject', 'days', 'cls'].forEach(onF);
+      bindHomework();
       $app.querySelectorAll('th[data-s]').forEach(t => (t.onclick = () => { const s = t.dataset.s; S.dir = S.sort === s ? -S.dir : (s === 'name' ? 1 : -1); S.sort = s; overview(); }));
       $app.querySelectorAll('tr.click').forEach(tr => (tr.onclick = () => { S.kid = tr.dataset.k; window.scrollTo(0, 0); render(); }));
     }
@@ -277,7 +290,9 @@
 
       $app.innerHTML = header() + `
         <button class="btn ghost" id="backAll">⬅️ All kids</button>
-        <div class="kid-head"><h2 dir="auto">🧒 ${esc(name)}</h2>${badge(all)}</div>
+        <div class="kid-head"><h2 dir="auto">${(rows.find(r => r.avatar) || {}).avatar || '🧒'} ${esc(name)}</h2>${badge(all)}
+          ${(rows.find(r => r.cls) || {}).cls ? `<span class="source">Class ${esc(rows.find(r => r.cls).cls)}</span>` : ''}
+          <button class="btn primary" id="printReport">🖨️ Weekly report for parents</button></div>
         <div class="kpis">
           <div class="kpi"><div class="v">${rows.length}</div><div class="l">🎮 Games played</div></div>
           <div class="kpi"><div class="v">${Math.round(all * 100)}%</div><div class="l">📈 Average score</div></div>
@@ -298,11 +313,108 @@
             <td>${'★'.repeat(+r.stars || 0)}${'☆'.repeat(3 - (+r.stars || 0))}</td><td class="muted">${Math.round((+r.seconds || 0) / 6) / 10} min</td></tr>`).join('')}</tbody></table></div></div>`;
       bindHeader();
       $app.querySelector('#backAll').onclick = () => { S.kid = null; render(); };
+      $app.querySelector('#printReport').onclick = () => printReport(rows, name);
+    }
+
+    const classes = () => [...new Set(S.data.map(r => String(r.cls || '')).filter(Boolean))].sort();
+
+    /* ---------- Homework ---------- */
+    function homeworkHTML() {
+      const hw = S.settings.homework || [];
+      const kidsIn = cls => [...new Set(S.data.filter(r => r.name && (!cls || r.cls === cls)).map(r => keyOf(r.name)))];
+      const doneBy = h => [...new Set(S.data.filter(r => r.name && (!h.cls || r.cls === h.cls) && Progress.matchesHomework(r, h)).map(r => String(r.name).trim()))];
+      const gradeOpts = [1, 2, 3, 4, 5, 6].map(g => `<option value="${g}" ${S.hw && +S.hw.grade === g ? 'selected' : ''}>Grade ${g}</option>`).join('');
+      const f = S.hw || { grade: 1, subject: 'math', topicId: 'all', game: 'any' };
+      const topics = (SUBJECTS[f.subject] && SUBJECTS[f.subject].grades[f.grade].topics) || [];
+      return `<div class="section"><h3>📌 Homework</h3>
+        <div class="table-wrap">${hw.length ? `<table><thead><tr><th class="nosort">For</th><th class="nosort">Subject</th><th class="nosort">Topic</th><th class="nosort">Game</th><th class="nosort">Due</th><th class="nosort">Done</th><th class="nosort"></th></tr></thead><tbody>
+          ${hw.map(h => { const d = doneBy(h), n = kidsIn(h.cls).length; return `<tr><td>${h.cls ? 'Class ' + esc(h.cls) : 'Everyone'}</td><td>${SUBJ[h.subject] || esc(h.subject)} · G${esc(h.grade)}</td>
+            <td dir="auto">${esc(h.topicName || 'All topics')}${h.note ? `<div class="muted small" dir="auto">${esc(h.note)}</div>` : ''}</td><td>${h.game && h.game !== 'any' ? GAME[h.game] || esc(h.game) : 'Any game'}</td><td>${esc(h.due || '—')}</td>
+            <td><b>${d.length}</b>${n ? ' / ' + n : ''}<div class="muted small" dir="auto">${d.map(esc).join(', ')}</div></td>
+            <td><button class="btn ghost hw-del" data-id="${esc(h.id)}">🗑️</button></td></tr>`; }).join('')}</tbody></table>` : '<div class="empty">No homework yet. Add some below; kids will see it on their home screen.</div>'}</div>
+        <form class="card hw-form">
+          <b>➕ New homework</b>
+          <div class="filters" style="margin:8px 0 0">
+            <select id="hwGrade">${gradeOpts}</select>
+            <select id="hwSubject">${['math', 'english', 'arabic'].map(k => `<option value="${k}" ${f.subject === k ? 'selected' : ''}>${SUBJ[k]}</option>`).join('')}</select>
+            <select id="hwTopic"><option value="all">All topics</option>${topics.map(t => `<option value="${t.id}" ${f.topicId === t.id ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select>
+            <select id="hwGame"><option value="any">Any game</option>${['quiz', 'time', 'balloon', 'memory', 'builder', 'order'].map(g => `<option value="${g}" ${f.game === g ? 'selected' : ''}>${GAME[g]}</option>`).join('')}</select>
+            <input id="hwCls" placeholder="Class (empty = everyone)" value="${esc(f.cls || '')}" style="max-width:200px">
+            <input id="hwDue" type="date" value="${esc(f.due || '')}" style="max-width:180px">
+            <input id="hwNote" placeholder="Note for kids (optional)" value="${esc(f.note || '')}" dir="auto">
+            <button class="btn primary" type="submit">Assign</button>
+          </div></form></div>`;
+    }
+    function bindHomework() {
+      const form = $app.querySelector('.hw-form'); if (!form) return;
+      const read = () => ({ grade: +$app.querySelector('#hwGrade').value, subject: $app.querySelector('#hwSubject').value, topicId: $app.querySelector('#hwTopic').value,
+        game: $app.querySelector('#hwGame').value, cls: Progress.cleanClass($app.querySelector('#hwCls').value), due: $app.querySelector('#hwDue').value, note: $app.querySelector('#hwNote').value.trim().slice(0, 80) });
+      ['#hwGrade', '#hwSubject'].forEach(id => ($app.querySelector(id).onchange = () => { S.hw = Object.assign(read(), { topicId: 'all' }); overview(); }));
+      form.onsubmit = async e => {
+        e.preventDefault();
+        const h = read(), tp = SUBJECTS[h.subject].grades[h.grade].topics.find(t => t.id === h.topicId);
+        h.topicName = tp ? tp.name : 'All topics'; h.id = Date.now().toString(36); h.created = new Date().toISOString();
+        await saveSettings(Object.assign({}, S.settings, { homework: (S.settings.homework || []).concat(h) }), '✅ Homework assigned');
+        S.hw = null;
+      };
+      $app.querySelectorAll('.hw-del').forEach(b => (b.onclick = () => {
+        if (!confirm('Delete this homework?')) return;
+        saveSettings(Object.assign({}, S.settings, { homework: S.settings.homework.filter(h => h.id !== b.dataset.id) }), '🗑️ Homework deleted');
+      }));
+      const lb = $app.querySelector('#lbToggle');
+      if (lb) lb.onchange = () => saveSettings(Object.assign({}, S.settings, { leaderboard: lb.checked }), lb.checked ? '🏆 Leaderboard is ON' : 'Leaderboard is OFF');
+    }
+    async function saveSettings(next, msg) {
+      try {
+        if (Progress.cloud()) await Progress.saveCloudSettings(S.pin, next);
+        else Progress.saveLocalSettings(next);
+        S.settings = next; S.msg = msg;
+      } catch (e) { S.msg = '⚠️ Could not save: ' + e.message + (Progress.cloud() ? ' (did you deploy the latest Code.gs as a New version?)' : ''); }
+      overview();
+    }
+
+    /* ---------- Settings ---------- */
+    function settingsHTML() {
+      return `<div class="section"><h3>⚙️ Settings</h3><div class="card">
+        <label class="switch"><input type="checkbox" id="lbToggle" ${S.settings.leaderboard ? 'checked' : ''}> <b>Show the class leaderboard to kids</b></label>
+        <p class="muted small">When on, kids see a 🏆 Leaderboard button with this week's stars (first names only; they can filter to their own class).
+        ${Progress.cloud() ? '' : 'Without a Google Sheet, homework and this setting only apply to games played in this browser.'}</p></div></div>`;
+    }
+
+    /* ---------- Printable weekly report ---------- */
+    function printReport(allRows, name) {
+      const since = Date.now() - 7 * 864e5, rows = allRows.filter(r => new Date(r.time) >= since), a = avg(rows);
+      const by = s => rows.filter(r => r.subject === s), mins = Math.round(rows.reduce((t, r) => t + (+r.seconds || 0), 0) / 60);
+      const days = new Set(rows.map(r => new Date(r.time).toDateString())).size;
+      const tp = {};
+      allRows.filter(r => r.topicId && !['all', 'daily', 'practice'].includes(r.topicId)).forEach(r => { const k = SUBJ[r.subject] + ' G' + r.grade + ': ' + r.topic; (tp[k] = tp[k] || []).push(r); });
+      const topics = Object.entries(tp).map(([k, rs]) => [k, avg(rs)]);
+      const strong = topics.filter(x => x[1] >= .9).map(x => x[0]), weak = topics.filter(x => x[1] < .6).map(x => x[0]);
+      const hw = (S.settings.homework || []).filter(h => !h.cls || allRows.some(r => r.cls === h.cls));
+      const w = window.open('', '_blank');
+      if (!w) { alert('Please allow pop-ups to print the report.'); return; }
+      w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Weekly report · ${esc(name)}</title>
+        <style>body{font-family:system-ui,'Segoe UI',Arial,sans-serif;max-width:760px;margin:24px auto;color:#222;padding:0 16px}h1{margin:0}table{width:100%;border-collapse:collapse;margin:10px 0}
+        td,th{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f4f4f4}.k{display:flex;gap:12px;flex-wrap:wrap}.k div{border:1px solid #ddd;border-radius:10px;padding:10px 14px;min-width:120px}
+        .k b{font-size:1.5rem;display:block}.muted{color:#666}@media print{button{display:none}}</style></head><body>
+        <button onclick="print()" style="float:right;padding:8px 14px">🖨️ Print / Save as PDF</button>
+        <h1>📚 Weekly learning report</h1><p class="muted">${esc(name)} · ${new Date(since).toLocaleDateString()} – ${new Date().toLocaleDateString()}</p>
+        <div class="k"><div><b>${rows.length}</b>games played</div><div><b>${mins}</b>minutes</div><div><b>${days}</b>days active</div><div><b>${rows.length ? Math.round(a * 100) + '%' : '—'}</b>average score</div><div><b>${rows.reduce((t, r) => t + (+r.stars || 0), 0)}</b>stars</div></div>
+        <h2>By subject</h2><table><tr><th>Subject</th><th>Games</th><th>Average</th><th>Level</th></tr>
+        ${['english', 'math', 'arabic'].map(s => { const x = by(s), v = avg(x); return `<tr><td>${SUBJ[s]}</td><td>${x.length}</td><td>${v == null ? '—' : Math.round(v * 100) + '%'}</td><td>${v == null ? '—' : level(v)[0]}</td></tr>`; }).join('')}</table>
+        <h2>🏆 Doing great at</h2><p>${strong.length ? strong.map(esc).join(' · ') : 'Keep playing to find out!'}</p>
+        <h2>💪 Needs more practice</h2><p>${weak.length ? weak.map(esc).join(' · ') : 'Nothing right now — well done!'}</p>
+        ${hw.length ? `<h2>📌 Homework</h2><table><tr><th>Homework</th><th>Due</th><th>Done?</th></tr>${hw.map(h => `<tr><td>${SUBJ[h.subject]} G${esc(h.grade)} · ${esc(h.topicName || 'All topics')}</td><td>${esc(h.due || '—')}</td><td>${allRows.some(r => Progress.matchesHomework(r, h)) ? '✅ Yes' : '❌ Not yet'}</td></tr>`).join('')}</table>` : ''}
+        <h2>Games this week</h2><table><tr><th>When</th><th>Subject</th><th>Topic</th><th>Game</th><th>Score</th><th>Stars</th></tr>
+        ${rows.map(r => `<tr><td>${when(r.time)}</td><td>${SUBJ[r.subject] || esc(r.subject)}</td><td>${esc(r.topic || '')}</td><td>${GAME[r.game] || esc(r.game)}</td><td>${esc(r.score)}${r.total !== '' && r.total != null ? ' / ' + esc(r.total) : ''}</td><td>${'★'.repeat(+r.stars || 0)}</td></tr>`).join('') || '<tr><td colspan="6">No games in the last 7 days.</td></tr>'}</table>
+        <p class="muted">Generated by Learn &amp; Play · تعلّم والعب</p></body></html>`);
+      w.document.close();
+      setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 400);
     }
 
     function exportCSV() {
       const rows = S.kid ? S.data.filter(r => keyOf(r.name) === S.kid) : filtered();
-      const cols = ['time', 'name', 'grade', 'subject', 'topic', 'game', 'score', 'total', 'stars', 'seconds'];
+      const cols = ['time', 'name', 'cls', 'grade', 'subject', 'topic', 'game', 'score', 'total', 'stars', 'seconds'];
       const cell = v => { v = String(v ?? ''); if (/^[=+\-@]/.test(v)) v = "'" + v; return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
       const csv = '﻿' + [cols.concat('percent').join(',')].concat(rows.map(r => cols.map(c => cell(r[c])).concat(Math.round(pct(r) * 100)).join(','))).join('\n');
       const a = document.createElement('a');
@@ -314,7 +426,7 @@
     /* Reload results without leaving the current view. Typing in the search box is never interrupted. */
     async function refresh(manual) {
       if (!S.pin || S.busy) return;
-      const typing = document.activeElement && document.activeElement.tagName === 'INPUT';
+      const typing = document.activeElement && /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName);
       if (!manual && typing) return;
       S.busy = true; if (manual) render();
       const y = window.scrollY;

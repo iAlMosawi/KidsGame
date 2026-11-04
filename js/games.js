@@ -1,5 +1,5 @@
-/* Sound, speech and the five game types. Each game gets a ctx:
-   { root, gen(), pairs(n), words, lang, t(key), end({score,total,stars}) } */
+/* Sound, speech and the game types. Each game gets a ctx:
+   { root, gen(), pairs(n), words, order(), lang, grade, t(key), answered(q, ok), total, end({score,total,stars}) } */
 const Sound = {
   on: true, ctx: null,
   tone(freq, dur = 0.12, type = 'sine', when = 0, vol = 0.15) {
@@ -17,16 +17,41 @@ const Sound = {
   pop() { this.tone(500, 0.06, 'triangle'); },
   flip() { this.tone(400, 0.05, 'triangle', 0, 0.08); },
   win() { [523, 659, 784, 1047].forEach((f, i) => this.tone(f, 0.18, 'sine', i * 0.12)); },
+  badge() { [784, 988, 1175, 1568].forEach((f, i) => this.tone(f, 0.15, 'triangle', i * 0.1, 0.12)); },
 };
 
+/* Speech: recorded files first (listed in audio/manifest.js), then the device's voice. */
+const Voice = {
+  ready: false,
+  has(lang) {
+    if (typeof AUDIO_FILES !== 'undefined' && (AUDIO_FILES[lang] || []).length) return true;
+    if (!('speechSynthesis' in window)) return false;
+    return speechSynthesis.getVoices().some(v => v.lang && v.lang.toLowerCase().startsWith(lang));
+  },
+  file(text, lang) {
+    if (typeof AUDIO_FILES === 'undefined') return null;
+    const list = AUDIO_FILES[lang] || [], key = String(text).trim();
+    return list.includes(key) ? `audio/${lang}/${encodeURIComponent(key)}.mp3` : null;
+  },
+};
+if ('speechSynthesis' in window) {
+  speechSynthesis.getVoices();
+  speechSynthesis.onvoiceschanged = () => { Voice.ready = true; document.dispatchEvent(new Event('voices-ready')); };
+}
+let currentAudio = null;
 function speak(text, lang) {
-  if (!text || !('speechSynthesis' in window)) return;
+  if (!text) return;
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  const f = Voice.file(text, lang);
+  if (f) { currentAudio = new Audio(f); currentAudio.play().catch(() => {}); return; }
+  if (!('speechSynthesis' in window)) return;
   speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = lang === 'ar' ? 'ar-SA' : 'en-US';
   u.rate = 0.85;
   const v = speechSynthesis.getVoices().find(v => v.lang && v.lang.toLowerCase().startsWith(lang));
   if (v) u.voice = v;
+  else if (lang === 'ar') { document.dispatchEvent(new CustomEvent('no-voice', { detail: lang })); }
   speechSynthesis.speak(u);
 }
 
@@ -34,41 +59,47 @@ const Games = (() => {
   const esc = U.esc;
 
   function questionHTML(q) {
-    let h = `<div class="q-prompt">${esc(q.prompt)}${q.say ? ' <button class="speak" title="Listen">🔈</button>' : ''}</div>`;
-    if (q.big) h += `<div class="q-big ${q.bigClass || ''}">${esc(q.big)}</div>`;
+    let h = `<div class="q-prompt" dir="auto">${esc(q.prompt)}${q.say && !q.listen ? ' <button class="speak" title="Listen">🔈</button>' : ''}</div>`;
+    if (q.listen) h += `<button class="listen-btn speak" title="Listen again">🔊</button>`;
+    if (q.svg) h += `<div class="q-pic">${q.svg}</div>`; // drawn by our own code, not user input
+    if (q.big) h += `<div class="q-big ${q.bigClass || ''}" dir="auto">${esc(q.big)}</div>`;
     if (q.tiles) h += `<div class="q-tiles">${q.tiles.map(c => `<span class="tile ${c === '_' ? 'blank' : ''}">${c === '_' ? '?' : esc(c)}</span>`).join('')}</div>`;
     return h;
   }
   function bindSpeak(root, q, lang) {
-    const b = root.querySelector('.speak');
-    if (b) b.onclick = () => speak(q.say, lang);
+    root.querySelectorAll('.speak').forEach(b => (b.onclick = () => speak(q.say, q.sayLang || lang)));
+    if (q.autoSay) setTimeout(() => speak(q.say, q.sayLang || lang), 250);
   }
   const head = (left, right, pct) =>
     `<div class="game-head"><span class="pill">${left}</span><div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div><span class="pill">${right}</span></div>`;
+  const explainHTML = (q, t) => (q.explain ? `<div class="explain" dir="auto">💡 ${esc(q.explain)}</div>` : `<div class="explain" dir="auto">✔ ${esc(t('answerIs'))} <b>${esc(q.answer)}</b></div>`);
+  const answerHTML = (q) => `<div class="answers ${q.choices.some(c => String(c).length > 22) ? 'long' : ''}">${q.choices.map(c => `<button class="answer" dir="auto">${esc(c)}</button>`).join('')}</div>`;
 
-  /* ---------- 1. Quiz: 10 multiple-choice questions ---------- */
+  /* ---------- 1. Quiz (also used by Practice and Daily Challenge) ---------- */
   function quiz(ctx) {
-    const total = 10; let n = 0, score = 0, q, locked;
+    const total = ctx.total || 10; let n = 0, score = 0, q, locked;
     const next = () => {
-      if (n >= total) return ctx.end({ score, total, stars: score >= 10 ? 3 : score >= 8 ? 2 : score >= 5 ? 1 : 0 });
-      q = ctx.gen(); n++; locked = false;
+      if (n >= total) return ctx.end({ score, total, stars: score >= total ? 3 : score >= total * 0.8 ? 2 : score >= total / 2 ? 1 : 0 });
+      q = ctx.gen(n); n++; locked = false;
+      if (!q) return ctx.end({ score, total: n - 1, stars: 0 });
       ctx.root.innerHTML = head(`${ctx.t('question')} ${n}/${total}`, `⭐ ${score}`, ((n - 1) / total) * 100) +
-        `<div class="card question">${questionHTML(q)}</div>
-         <div class="answers">${q.choices.map(c => `<button class="answer">${esc(c)}</button>`).join('')}</div>
-         <div class="feedback"></div>`;
+        `<div class="card question">${questionHTML(q)}</div>${answerHTML(q)}<div class="feedback"></div>`;
       bindSpeak(ctx.root, q, ctx.lang);
       ctx.root.querySelectorAll('.answer').forEach(b => (b.onclick = () => choose(b)));
     };
     const choose = (b) => {
       if (locked) return; locked = true;
-      const fb = ctx.root.querySelector('.feedback');
-      if (b.textContent === q.answer) {
+      const fb = ctx.root.querySelector('.feedback'), ok = b.textContent === q.answer;
+      ctx.answered && ctx.answered(q, ok);
+      if (ok) {
         score++; b.classList.add('correct'); Sound.good(); fb.textContent = U.pick(ctx.t('praise'));
         setTimeout(next, 900);
       } else {
-        b.classList.add('wrong'); Sound.bad(); fb.textContent = ctx.t('oops');
+        b.classList.add('wrong'); Sound.bad();
         ctx.root.querySelectorAll('.answer').forEach(x => { if (x.textContent === q.answer) x.classList.add('correct'); });
-        setTimeout(next, 1700);
+        // Show why, and let the child read it before moving on.
+        fb.innerHTML = explainHTML(q, ctx.t) + `<button class="btn primary next-btn">${esc(ctx.t('next'))} ▶</button>`;
+        fb.querySelector('.next-btn').onclick = next;
       }
     };
     next();
@@ -80,19 +111,21 @@ const Games = (() => {
     const finish = () => { clearInterval(timer); ctx.end({ score, total: null, stars: score >= 18 ? 3 : score >= 12 ? 2 : score >= 6 ? 1 : 0 }); };
     const draw = () => {
       ctx.root.innerHTML = head(`⏱️ <b class="time">${left}</b>s`, `⭐ ${score} ${streak >= 3 ? '🔥' + streak : ''}`, (left / LIMIT) * 100) +
-        `<div class="card question">${questionHTML(q)}</div>
-         <div class="answers">${q.choices.map(c => `<button class="answer">${esc(c)}</button>`).join('')}</div>`;
+        `<div class="card question">${questionHTML(q)}</div>${answerHTML(q)}<div class="feedback"></div>`;
       bindSpeak(ctx.root, q, ctx.lang);
       ctx.root.querySelectorAll('.answer').forEach(b => (b.onclick = () => choose(b)));
     };
     const next = () => { q = ctx.gen(); locked = false; draw(); };
     const choose = (b) => {
       if (locked) return; locked = true;
-      if (b.textContent === q.answer) { score++; streak++; b.classList.add('correct'); Sound.good(); setTimeout(next, 350); }
+      const ok = b.textContent === q.answer;
+      ctx.answered && ctx.answered(q, ok);
+      if (ok) { score++; streak++; b.classList.add('correct'); Sound.good(); setTimeout(next, 350); }
       else {
         streak = 0; b.classList.add('wrong'); Sound.bad();
         ctx.root.querySelectorAll('.answer').forEach(x => { if (x.textContent === q.answer) x.classList.add('correct'); });
-        setTimeout(next, 900);
+        ctx.root.querySelector('.feedback').innerHTML = explainHTML(q, ctx.t);
+        setTimeout(next, 1900);
       }
     };
     timer = setInterval(() => {
@@ -106,41 +139,44 @@ const Games = (() => {
     next();
   }
 
-  /* ---------- 3. Balloon Pop: pop the balloon with the right answer ---------- */
+  /* ---------- 3. Balloon Pop ---------- */
   function balloons(ctx) {
     const total = 10, colors = ['#ff6b6b', '#4dabf7', '#51cf66', '#fcc419', '#cc5de8', '#ff922b'];
-    let n = 0, score = 0, lives = 3, q, items = [], raf, last, busy;
-    ctx.root.innerHTML = `<div class="balloon-head"></div><div class="card question small"></div><div class="sky"></div>`;
-    const sky = ctx.root.querySelector('.sky');
+    let n = 0, score = 0, lives = 3, q, items = [], raf, last, busy, missed;
+    ctx.root.innerHTML = `<div class="balloon-head"></div><div class="card question small"></div><div class="sky"></div><div class="feedback small"></div>`;
+    const sky = ctx.root.querySelector('.sky'), fb = ctx.root.querySelector('.feedback');
     const drawHead = () => {
       ctx.root.querySelector('.balloon-head').innerHTML =
-        head(`${ctx.t('question')} ${Math.min(n, total)}/${total}`, `${'❤️'.repeat(lives)}${'🤍'.repeat(3 - lives)}  ⭐ ${score}`, (n / total) * 100);
+        head(`${ctx.t('question')} ${Math.min(n, total)}/${total}`, `${'❤️'.repeat(Math.max(lives, 0))}${'🤍'.repeat(3 - Math.max(lives, 0))}  ⭐ ${score}`, (n / total) * 100);
     };
     const finish = () => { cancelAnimationFrame(raf); ctx.end({ score, total, stars: score >= 9 ? 3 : score >= 7 ? 2 : score >= 4 ? 1 : 0 }); };
     const next = () => {
       if (n >= total || lives <= 0) return finish();
-      q = ctx.gen(); n++; busy = false; drawHead();
+      q = ctx.gen(); n++; busy = false; missed = false; drawHead(); fb.innerHTML = '';
       const qc = ctx.root.querySelector('.question'); qc.innerHTML = questionHTML(q); bindSpeak(qc, q, ctx.lang);
       sky.innerHTML = ''; items = [];
-      const lanes = U.shuffle([...Array(q.choices.length).keys()]), H = sky.clientHeight;
+      const lanes = U.shuffle([...Array(q.choices.length).keys()]);
       q.choices.forEach((c, i) => {
         const el = document.createElement('button');
         el.className = 'balloon'; el.style.setProperty('--c', colors[(i + n) % colors.length]);
-        el.innerHTML = `<span>${esc(c)}</span>`;
+        el.innerHTML = `<span dir="auto">${esc(c)}</span>`;
         el.style.left = ((lanes[i] + 0.5) / q.choices.length) * 100 + '%';
-        const it = { el, text: c, y: -40 - Math.random() * 120, speed: 38 + Math.random() * 22 + n * 2, H };
+        const it = { el, text: c, y: -40 - Math.random() * 120, speed: 38 + Math.random() * 22 + n * 2 };
         el.onclick = () => hit(it);
         sky.appendChild(el); items.push(it);
       });
     };
+    const miss = () => { if (!missed) { missed = true; ctx.answered && ctx.answered(q, false); } };
     const hit = (it) => {
       if (busy) return;
       if (it.text === q.answer) {
         busy = true; score++; Sound.pop(); Sound.good(); it.el.classList.add('popped');
+        if (!missed) ctx.answered && ctx.answered(q, true);
         setTimeout(next, 600);
       } else {
-        Sound.bad(); lives--; it.el.classList.add('wrong-b'); it.el.disabled = true; drawHead();
-        if (lives <= 0) { busy = true; setTimeout(finish, 700); }
+        Sound.bad(); lives--; it.el.classList.add('wrong-b'); it.el.disabled = true; drawHead(); miss();
+        fb.innerHTML = explainHTML(q, ctx.t);
+        if (lives <= 0) { busy = true; setTimeout(finish, 1500); }
       }
     };
     const loop = (ts) => {
@@ -152,9 +188,9 @@ const Games = (() => {
           it.y += it.speed * dt;
           it.el.style.bottom = it.y + 'px';
           if (it.text === q.answer && it.y > H) { // the right balloon escaped
-            busy = true; lives--; Sound.bad(); drawHead();
-            it.el.classList.add('escaped');
-            setTimeout(next, 700);
+            busy = true; lives--; Sound.bad(); drawHead(); miss();
+            fb.innerHTML = explainHTML(q, ctx.t);
+            setTimeout(next, 1800);
           }
         }
       }
@@ -163,7 +199,7 @@ const Games = (() => {
     next(); raf = requestAnimationFrame(loop);
   }
 
-  /* ---------- 4. Memory Match: flip cards to find pairs ---------- */
+  /* ---------- 4. Memory Match ---------- */
   function memory(ctx) {
     const pairs = ctx.pairs(ctx.grade <= 2 ? 6 : 8);
     if (pairs.length < 3) { ctx.root.innerHTML = `<p class="card">${ctx.t('noGame')}</p>`; return; }
@@ -171,14 +207,10 @@ const Games = (() => {
     pairs.forEach(([a, b], i) => { cards.push({ id: i, text: a }, { id: i, text: b }); });
     cards = U.shuffle(cards);
     let open = [], found = 0, moves = 0, lock = false;
-    const draw = () => {
-      ctx.root.innerHTML = head(`${ctx.t('moves')}: <b class="moves">${moves}</b>`, `✅ <b class="found">${found}</b>/${pairs.length}`, 0) +
-        `<p class="hint">${ctx.t('memoryHint')}</p><div class="memory grid-${cards.length}">${cards.map((c, i) =>
-          `<button class="mcard" data-i="${i}"><span class="front">❓</span><span class="back ${/\p{Extended_Pictographic}/u.test(c.text) && c.text.length <= 24 ? 'emo' : ''}">${esc(c.text)}</span></button>`).join('')}</div>`;
-      ctx.root.querySelectorAll('.mcard').forEach(b => (b.onclick = () => flip(b)));
-    };
+    ctx.root.innerHTML = head(`${ctx.t('moves')}: <b class="moves">${moves}</b>`, `✅ <b class="found">${found}</b>/${pairs.length}`, 0) +
+      `<p class="hint">${ctx.t('memoryHint')}</p><div class="memory grid-${cards.length}">${cards.map((c, i) =>
+        `<button class="mcard" data-i="${i}"><span class="front">❓</span><span class="back ${/\p{Extended_Pictographic}/u.test(c.text) && c.text.length <= 24 ? 'emo' : ''}" dir="auto">${esc(c.text)}</span></button>`).join('')}</div>`;
     const flip = (b) => {
-      const c = cards[b.dataset.i];
       if (lock || b.classList.contains('open') || b.classList.contains('done')) return;
       b.classList.add('open'); Sound.flip(); open.push(b);
       if (open.length < 2) return;
@@ -196,10 +228,10 @@ const Games = (() => {
         setTimeout(() => { x.classList.remove('open'); y.classList.remove('open'); open = []; lock = false; }, 1000);
       }
     };
-    draw();
+    ctx.root.querySelectorAll('.mcard').forEach(b => (b.onclick = () => flip(b)));
   }
 
-  /* ---------- 5. Word Builder: tap letters to spell the picture ---------- */
+  /* ---------- 5. Word Builder ---------- */
   function builder(ctx) {
     const list = U.sample(ctx.words, Math.min(8, ctx.words.length));
     if (!list.length) { ctx.root.innerHTML = `<p class="card">${ctx.t('noGame')}</p>`; return; }
@@ -233,7 +265,6 @@ const Games = (() => {
       };
       const removeAt = (si) => { if (!slots[si]) return; slots[si].used = false; slots[si] = null; draw(); };
       const hint = () => {
-        // Clear wrong letters, then place the next correct letter.
         slots.forEach((s, i) => { if (s && s.c !== letters[i]) { s.used = false; slots[i] = null; } });
         const si = slots.indexOf(null); if (si < 0) return;
         const p = pool.find(p => !p.used && p.c === letters[si]);
@@ -258,6 +289,93 @@ const Games = (() => {
     next();
   }
 
+  /* ---------- 6. Put in Order: drag (or tap) the pieces into the right order ---------- */
+  function order(ctx) {
+    const total = 6; let n = 0, score = 0, q, placed, pool, tries;
+    const next = () => {
+      if (n >= total) return ctx.end({ score, total, stars: score >= total ? 3 : score >= total - 1 ? 2 : score >= total / 2 ? 1 : 0 });
+      q = ctx.order(); n++; tries = 0;
+      pool = q.items.map((x, i) => ({ x, i })); placed = [];
+      draw();
+    };
+    const draw = (msg = '') => {
+      ctx.root.innerHTML = head(`${ctx.t('question')} ${n}/${total}`, `⭐ ${score}`, ((n - 1) / total) * 100) +
+        `<div class="card question"><div class="q-prompt">${esc(q.prompt)}</div>
+          <div class="order-line drop" data-zone="line">${placed.length ? placed.map((p, k) => `<button class="order-chip in" data-k="${k}" dir="auto">${esc(p.x)}</button>`).join('') : `<span class="drop-hint">${esc(ctx.t('dragHere'))}</span>`}</div></div>
+        <div class="order-pool drop" data-zone="pool">${pool.map((p, k) => `<button class="order-chip" data-k="${k}" dir="auto">${esc(p.x)}</button>`).join('')}</div>
+        <div class="row"><button class="btn ghost undo-btn">↩️ ${esc(ctx.t('reset'))}</button></div><div class="feedback">${msg}</div>`;
+      ctx.root.querySelectorAll('.order-pool .order-chip').forEach(b => enableDrag(b, 'pool', +b.dataset.k));
+      ctx.root.querySelectorAll('.order-line .order-chip').forEach(b => enableDrag(b, 'line', +b.dataset.k));
+      ctx.root.querySelector('.undo-btn').onclick = () => { pool = pool.concat(placed); placed = []; draw(); };
+    };
+    const move = (from, k, toZone, beforeIdx) => {
+      const src = from === 'pool' ? pool : placed, [item] = src.splice(k, 1);
+      const dst = toZone === 'pool' ? pool : placed;
+      if (beforeIdx == null || beforeIdx > dst.length) dst.push(item); else dst.splice(beforeIdx, 0, item);
+      Sound.flip(); draw(); check();
+    };
+    // Pointer-based drag that works with mouse and touch. A short tap just moves the piece across.
+    const enableDrag = (el, zone, k) => {
+      el.onpointerdown = (e) => {
+        e.preventDefault();
+        const sx = e.clientX, sy = e.clientY; let ghost = null;
+        const onMove = (ev) => {
+          if (!ghost && Math.hypot(ev.clientX - sx, ev.clientY - sy) > 8) {
+            ghost = el.cloneNode(true); ghost.classList.add('ghost'); document.body.appendChild(ghost); el.classList.add('dragging');
+          }
+          if (ghost) { ghost.style.left = ev.clientX + 'px'; ghost.style.top = ev.clientY + 'px'; }
+        };
+        const onUp = (ev) => {
+          window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp);
+          if (!ghost) return move(zone, k, zone === 'pool' ? 'line' : 'pool'); // tap
+          ghost.remove();
+          const target = document.elementFromPoint(ev.clientX, ev.clientY);
+          const dropZone = target && target.closest('.drop');
+          if (!dropZone) return draw();
+          const toZone = dropZone.dataset.zone, chip = target.closest('.order-chip');
+          let before = null;
+          if (chip && chip !== el) {
+            const r = chip.getBoundingClientRect(), rtl = getComputedStyle(dropZone).direction === 'rtl';
+            const after = rtl ? ev.clientX < r.left + r.width / 2 : ev.clientX > r.left + r.width / 2;
+            before = +chip.dataset.k + (after ? 1 : 0);
+            if (toZone === zone && before > k) before--; // removing the item shifts the index
+          }
+          move(zone, k, toZone, before);
+        };
+        window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp);
+      };
+    };
+    const check = () => {
+      if (pool.length) return;
+      const got = placed.map(p => p.x).join(' '), ok = [q.answer].concat(q.alts || []).some(a => a.join(' ') === got);
+      const line = ctx.root.querySelector('.order-line');
+      if (ok) {
+        if (tries === 0) score++;
+        ctx.answered && ctx.answered(null, tries === 0);
+        Sound.good(); line.classList.add('good');
+        ctx.root.querySelector('.feedback').innerHTML = esc(U.pick(ctx.t('praise')));
+        setTimeout(next, 1200);
+      } else {
+        tries++; Sound.bad(); line.classList.add('shake');
+        if (tries >= 2) {
+          ctx.root.querySelector('.feedback').innerHTML = `<div class="explain" dir="auto">💡 ${esc(q.explain)}</div><button class="btn primary next-btn">${esc(ctx.t('next'))} ▶</button>`;
+          ctx.root.querySelector('.next-btn').onclick = next;
+        } else {
+          // Keep the pieces that are already in the right place at the start; send the rest back.
+          ctx.root.querySelector('.feedback').textContent = ctx.t('tryAgain');
+          setTimeout(() => {
+            if (!ctx.alive()) return;
+            let keep = 0;
+            while (keep < placed.length && placed[keep].x === q.answer[keep]) keep++;
+            pool = U.shuffle(pool.concat(placed.slice(keep))); placed = placed.slice(0, keep);
+            draw(esc(ctx.t('tryAgain')));
+          }, 900);
+        }
+      }
+    };
+    next();
+  }
+
   return {
     list: [
       { id: 'quiz', icon: '❓', run: quiz, needs: 'gen' },
@@ -265,6 +383,8 @@ const Games = (() => {
       { id: 'balloon', icon: '🎈', run: balloons, needs: 'short' },
       { id: 'memory', icon: '🃏', run: memory, needs: 'pair' },
       { id: 'builder', icon: '🧩', run: builder, needs: 'words' },
+      { id: 'order', icon: '🔀', run: order, needs: 'order' },
     ],
+    quiz,
   };
 })();

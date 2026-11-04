@@ -63,71 +63,170 @@
 
   const picWord = (list) => ({
     id: 'picword', name: 'صورة وكلمة',
-    gen: () => { const [w, e] = pick(list); return { prompt: 'ما اسمُ هذه الصورة؟', big: e, bigClass: 'emoji', answer: w, choices: choices(w, list.map(p => p[0])) }; },
+    gen: () => { const [w, e] = pick(list); return { prompt: 'ما اسمُ هذه الصورة؟', big: e, bigClass: 'emoji', answer: w, choices: choices(w, list.map(p => p[0])), explain: `${e} اسمُها «${w}».` }; },
     pair: () => { const [w, e] = pick(list); return [e, w]; },
   });
+
+  /* ---------- الحركات والتنوين والشدة ---------- */
+  const plainLetters = letters.filter(x => x !== 'هـ' && x !== 'أ').concat(['ه']);
+  const HARAKAT = [['َ', 'فتحة', 'الفتحةُ خطٌّ صغيرٌ مائلٌ فوق الحرف، ونقرأ الحرف معها بصوت «اَ».'],
+    ['ُ', 'ضمة', 'الضمةُ واوٌ صغيرةٌ فوق الحرف، ونقرأ الحرف معها بصوت «اُ».'],
+    ['ِ', 'كسرة', 'الكسرةُ خطٌّ صغيرٌ مائلٌ تحت الحرف، ونقرأ الحرف معها بصوت «اِ».'],
+    ['ْ', 'سكون', 'السكونُ دائرةٌ صغيرةٌ فوق الحرف، ومعناه أن الحرف ساكنٌ بلا حركة.']];
+  const harakaTopic = (withSukun) => ({
+    id: 'haraka', name: 'الحركات', pair: null,
+    gen: () => {
+      const list = withSukun ? HARAKAT : HARAKAT.slice(0, 3), [mark, name, why] = pick(list), L = pick(plainLetters);
+      return { prompt: 'ما الحركةُ على هذا الحرف؟', big: L + mark, bigClass: 'letter', answer: name, choices: shuffle(list.map(h => h[1])), explain: why };
+    },
+  });
+  const tanweenWords = ['كتاب', 'قلم', 'بيت', 'ولد', 'باب', 'نجم', 'بحر', 'جبل', 'قمر', 'طالب'];
+  const TANWEEN = [[w => w + 'ٌ', 'تنوين الضم', 'تنوينُ الضمِّ ضمّتان فوق آخر الكلمة (ٌ) ونقرؤه «ـُنْ».'],
+    [w => w + 'اً', 'تنوين الفتح', 'تنوينُ الفتحِ فتحتان على آخر الكلمة (ً) ونقرؤه «ـَنْ»، وغالباً تأتي معه ألف.'],
+    [w => w + 'ٍ', 'تنوين الكسر', 'تنوينُ الكسرِ كسرتان تحت آخر الكلمة (ٍ) ونقرؤه «ـِنْ».']];
+  const tanweenTopic = {
+    id: 'tanween', name: 'التنوين', pair: null,
+    gen: () => { const [f, name, why] = pick(TANWEEN), w = f(pick(tanweenWords)); return { prompt: 'ما نوعُ التنوين في هذه الكلمة؟', big: w, bigClass: 'letter word', answer: name, choices: shuffle(TANWEEN.map(t => t[1])), explain: why }; },
+  };
+  const withShadda = ['مُعَلِّم', 'سُكَّر', 'قِطَّة', 'جَدَّة', 'دُبّ', 'الشَّمس', 'مُدَرِّسة', 'تُفّاح'];
+  const noShadda = ['كِتاب', 'قَلَم', 'بَيْت', 'وَرْدة', 'سَمَكة', 'باب', 'نَجْم', 'بَحْر'];
+  const shaddaTopic = {
+    id: 'shadda', name: 'الشدة', pair: null,
+    gen: () => { const w = pick(withShadda); return { prompt: 'أيُّ كلمةٍ فيها شَدّة (ّ)؟', answer: w, choices: shuffle([w, ...U.sample(noShadda, 3)]), explain: `في «${w}» شدّة (ّ)، والشدّة تعني أن الحرف مكرّرٌ مرتين: الأول ساكن والثاني متحرك.` }; },
+  };
+  /* Listen to a letter's name, choose the letter (needs an Arabic voice or recordings). */
+  const listenLetter = {
+    id: 'listen', name: 'استمع واختر', needsVoice: 'ar', pair: null,
+    gen: () => { const a = pick(alphabet); return { prompt: 'استمعْ واخترِ الحرفَ الذي تسمعه:', listen: a[3], say: a[3], autoSay: true, answer: a[2], choices: choices(a[2], letters), explain: `سمعتَ «${a[3]}»، وهو الحرف ${a[2]}.` }; },
+  };
+
+  /* ---------- القراءة والفهم ---------- */
+  const reading = {
+    easy: [
+      ['ذهبت سارة إلى السوق مع أمها، واشترت تفاحاً أحمر.', 'مع مَن ذهبت سارة؟', 'مع أمها', ['مع أبيها', 'مع أخيها', 'مع صديقتها']],
+      ['عند علي قطة بيضاء صغيرة، يلعب معها كل يوم.', 'ما لونُ القطة؟', 'بيضاء', ['سوداء', 'حمراء', 'صفراء']],
+      ['الشمس تشرق في الصباح، والقمر يظهر في الليل.', 'متى يظهر القمر؟', 'في الليل', ['في الصباح', 'في الظهر', 'في العصر']],
+      ['يحب عمر الرسم، وقد رسم شجرة كبيرة وبيتاً جميلاً.', 'ماذا يحب عمر؟', 'الرسم', ['السباحة', 'الطبخ', 'النوم']],
+    ],
+    mid: [
+      ['النحلة حشرة نافعة، تجمع الرحيق من الأزهار وتصنع منه العسل.', 'ماذا تصنع النحلة؟', 'العسل', ['الحليب', 'الخبز', 'العصير']],
+      ['كان الجو ممطراً، فأخذت منى مظلتها حتى لا تبتل.', 'لماذا أخذت منى مظلتها؟', 'لأن الجو ممطر', ['لأن الجو حار', 'لأنها جائعة', 'لأن الطريق طويل']],
+      ['يُسمّى الجمل سفينة الصحراء، لأنه يستطيع السير أياماً طويلة دون ماء.', 'لماذا يُسمّى الجمل سفينة الصحراء؟', 'لأنه يسير أياماً دون ماء', ['لأنه يسبح في البحر', 'لأنه صغير الحجم', 'لأنه يطير']],
+    ],
+    hard: [
+      ['قرر الطلاب تنظيف حديقة المدرسة، فجمعوا الأوراق وزرعوا الأزهار، فأصبحت الحديقة جميلة.', 'ما الفكرةُ الرئيسةُ للنص؟', 'تعاون الطلاب لتجميل الحديقة', ['الطلاب يلعبون الكرة', 'المعلم غائب اليوم', 'الحديقة بعيدة عن المدرسة']],
+      ['الماء أساس الحياة، فلا يستطيع الإنسان أو الحيوان أو النبات العيش بدونه، لذلك يجب أن نحافظ عليه.', 'لماذا يجب أن نحافظ على الماء؟', 'لأنه أساس الحياة', ['لأنه غالي الثمن', 'لأنه بارد', 'لأنه في البحر']],
+      ['كان يوسف خائفاً قبل المسابقة، لكنه تدرّب كثيراً ففاز بالمركز الأول.', 'ما سببُ فوز يوسف؟', 'التدريب الكثير', ['الحظ', 'الخوف', 'النوم مبكراً']],
+    ],
+  };
+  const readTopic = (list) => ({
+    id: 'read', name: 'القراءة والفهم', long: true, pair: null,
+    gen: () => { const [text, q, a, o] = pick(list); return { prompt: 'اقرأْ ثم أجبْ: ' + q, big: text, bigClass: 'passage', say: text, answer: a, choices: shuffle([a, ...o]), explain: `ارجعْ إلى النص: الإجابة «${a}».` }; },
+  });
+
+  /* ---------- Sentences for "Put in Order". Arabic word order is flexible, so other correct orders are listed too. ---------- */
+  const sentences = {
+    1: [['ذهب أحمد إلى المدرسة', 'أحمد ذهب إلى المدرسة', 'إلى المدرسة ذهب أحمد'], ['أنا أحب أمي'], ['الشمس ساطعة'], ['أكل الولد التفاحة', 'الولد أكل التفاحة'], ['هذا بيت كبير']],
+    2: [['تلعب البنت في الحديقة', 'البنت تلعب في الحديقة', 'في الحديقة تلعب البنت'], ['يقرأ أبي الجريدة', 'أبي يقرأ الجريدة'],
+      ['يضيء القمر في الليل', 'القمر يضيء في الليل', 'في الليل يضيء القمر'], ['شربت الماء البارد']],
+    3: [['يذهب الطلاب إلى المدرسة صباحاً', 'صباحاً يذهب الطلاب إلى المدرسة', 'يذهب الطلاب صباحاً إلى المدرسة'],
+      ['تسقي فاطمة الأزهار كل يوم', 'فاطمة تسقي الأزهار كل يوم', 'كل يوم تسقي فاطمة الأزهار'], ['أحب قراءة القصص الجميلة']],
+    4: [['ساعد الولد جدته في المطبخ', 'الولد ساعد جدته في المطبخ', 'في المطبخ ساعد الولد جدته'],
+      ['زرع الفلاح الأشجار في الحقل', 'الفلاح زرع الأشجار في الحقل', 'في الحقل زرع الفلاح الأشجار'], ['يحب أخي قراءة القصص', 'أخي يحب قراءة القصص']],
+    5: [['يحافظ الطالب المجتهد على وقته', 'الطالب المجتهد يحافظ على وقته'],
+      ['تعيش الأسماك الملونة في البحر', 'الأسماك الملونة تعيش في البحر', 'في البحر تعيش الأسماك الملونة'], ['النظافة من الإيمان']],
+    6: [['العلم نور يضيء طريق الإنسان'], ['يجب أن نحافظ على نظافة البيئة'],
+      ['سافرت العائلة إلى مكة في الإجازة', 'العائلة سافرت إلى مكة في الإجازة', 'في الإجازة سافرت العائلة إلى مكة', 'سافرت العائلة في الإجازة إلى مكة']],
+  };
+  const orderFor = g => () => {
+    const [main, ...alts] = pick(sentences[g]), words = main.split(' ');
+    return { prompt: 'رتّبِ الكلماتِ لتكوّنَ جملةً صحيحة:', items: shuffle(words), answer: words, alts: alts.map(a => a.split(' ')), explain: 'الجملة: «' + main + '».' };
+  };
+
+  const WTYPE_WHY = { 'اسم': 'الاسمُ يدلّ على إنسانٍ أو حيوانٍ أو شيءٍ أو مكان.', 'فعل': 'الفعلُ يدلّ على حدثٍ مرتبطٍ بزمن.', 'حرف': 'الحرفُ لا يظهر معناه إلا مع غيره من الكلمات.' };
+  const TENSE_WHY = ['الماضي حدثٌ وقع وانتهى.', 'المضارعُ حدثٌ يقع الآن، ويبدأ بأحد حروف «أنيت».', 'الأمرُ طلبُ القيام بالفعل.'];
+  const PTYPE_WHY = { 'جمع مذكر سالم': 'ينتهي بـ«ون» أو «ين» ولا تتغير صورة المفرد.', 'جمع مؤنث سالم': 'ينتهي بـ«ات».', 'جمع تكسير': 'تتغير فيه صورة المفرد.' };
 
   const grades = {
     1: {
       topics: [
-        { id: 'starts', name: 'الحرف الأول', gen: () => { const [w, e, L] = pick(alphabet); return { prompt: 'بأيِّ حرفٍ تبدأ هذه الكلمة؟', big: e, bigClass: 'emoji', say: w, answer: L, choices: choices(L, letters) }; } },
-        { id: 'lname', name: 'أسماء الحروف', gen: () => { const a = pick(alphabet); return { prompt: 'ما اسمُ هذا الحرف؟', big: a[2], bigClass: 'letter', answer: a[3], choices: choices(a[3], alphabet.map(x => x[3])) }; }, pair: () => { const a = pick(alphabet); return [a[2], a[3]]; } },
+        { id: 'starts', name: 'الحرف الأول', gen: () => { const [w, e, L] = pick(alphabet); return { prompt: 'بأيِّ حرفٍ تبدأ هذه الكلمة؟', big: e, bigClass: 'emoji', say: w, answer: L, choices: choices(L, letters), explain: `${e} «${w}» تبدأ بحرف ${L}.` }; } },
+        { id: 'lname', name: 'أسماء الحروف', gen: () => { const a = pick(alphabet); return { prompt: 'ما اسمُ هذا الحرف؟', big: a[2], bigClass: 'letter', answer: a[3], choices: choices(a[3], alphabet.map(x => x[3])), explain: `الحرف «${a[2]}» اسمه «${a[3]}»، مثل «${a[0]}» ${a[1]}.` }; }, pair: () => { const a = pick(alphabet); return [a[2], a[3]]; } },
         picWord(pics),
+        harakaTopic(false),
+        listenLetter,
       ],
       words: pics.filter(p => p[0].length <= 3),
+      order: orderFor(1),
     },
     2: {
       topics: [
         { id: 'missing', name: 'الحرف الناقص', gen: () => {
           const [w, e] = pick(allPics.slice(0, 40)), chars = [...w], i = Math.floor(Math.random() * chars.length), L = chars[i];
-          return { prompt: 'ما الحرفُ الناقص؟', big: e, bigClass: 'emoji small', tiles: chars.map((c, j) => (j === i ? '_' : c)), answer: L, choices: choices(L, letters.filter(x => x !== 'أ' && x !== 'هـ').concat(['ه', 'ة', 'ا'])) };
+          return { prompt: 'ما الحرفُ الناقص؟', big: e, bigClass: 'emoji small', tiles: chars.map((c, j) => (j === i ? '_' : c)), answer: L, choices: choices(L, letters.filter(x => x !== 'أ' && x !== 'هـ').concat(['ه', 'ة', 'ا'])), explain: `الكلمة هي «${w}».` };
         } },
-        T('opp', 'الأضداد', opposites.slice(0, 10), a => ({ prompt: 'ما عكسُ هذه الكلمة؟', big: a, say: a })),
-        T('dual', 'المثنى', dual, a => ({ prompt: 'ما مثنى هذه الكلمة؟', big: a, say: a })),
+        T('opp', 'الأضداد', opposites.slice(0, 10), (a, b) => ({ prompt: 'ما عكسُ هذه الكلمة؟', big: a, say: a, explain: `عكسُ «${a}» هو «${b}».` })),
+        T('dual', 'المثنى', dual, (a, b) => ({ prompt: 'ما مثنى هذه الكلمة؟', big: a, say: a, explain: `المثنى يدل على اثنين، ونصوغه بزيادة «ان»: ${a} ← ${b}.` })),
+        harakaTopic(true),
+        tanweenTopic,
+        shaddaTopic,
         picWord(allPics.slice(0, 40)),
+        readTopic(reading.easy),
       ],
       words: allPics.slice(20, 40).filter(p => p[0].length <= 4),
+      order: orderFor(2),
     },
     3: {
       topics: [
-        T('plural', 'الجمع', plural, a => ({ prompt: 'ما جمعُ هذه الكلمة؟', big: a, say: a })),
-        T('fem', 'المذكر والمؤنث', feminine, a => ({ prompt: 'ما مؤنثُ هذه الكلمة؟', big: a, say: a, wrong: [a + 'ات', a + 'ون'] })),
-        T('opp', 'الأضداد', opposites, a => ({ prompt: 'ما عكسُ هذه الكلمة؟', big: a, say: a })),
+        T('plural', 'الجمع', plural, (a, b) => ({ prompt: 'ما جمعُ هذه الكلمة؟', big: a, say: a, explain: `جمعُ «${a}» هو «${b}».` })),
+        T('fem', 'المذكر والمؤنث', feminine, (a, b) => ({ prompt: 'ما مؤنثُ هذه الكلمة؟', big: a, say: a, wrong: [a + 'ات', a + 'ون'], explain: `نؤنّث الكلمة بزيادة التاء المربوطة «ة»: ${a} ← ${b}.` })),
+        T('opp', 'الأضداد', opposites, (a, b) => ({ prompt: 'ما عكسُ هذه الكلمة؟', big: a, say: a, explain: `عكسُ «${a}» هو «${b}».` })),
+        tanweenTopic,
+        readTopic(reading.easy.concat(reading.mid)),
       ],
       words: allPics.filter(p => p[0].length >= 4 && p[0].length <= 5).slice(0, 14),
+      order: orderFor(3),
     },
     4: {
       topics: [
-        { id: 'wtype', name: 'أنواع الكلمة', gen: () => { const [w, t] = pick(wordTypes); return { prompt: 'ما نوعُ هذه الكلمة؟', big: w, say: w, answer: t, choices: ['اسم', 'فعل', 'حرف'] }; } },
-        { id: 'tense', name: 'أزمنة الفعل', gen: () => { const v = pick(verbs), i = Math.floor(Math.random() * 3); return { prompt: 'ما زمنُ هذا الفعل؟', big: v[i], say: v[i], answer: tenseNames[i], choices: tenseNames.slice() }; } },
-        T('syn', 'المرادفات', synonyms, a => ({ prompt: 'ما مرادفُ هذه الكلمة؟', big: a, say: a })),
-        { id: 'present', name: 'الماضي والمضارع', gen: () => { const v = pick(verbs); return { prompt: 'ما المضارعُ من هذا الفعل؟', big: v[0], say: v[0], answer: v[1], choices: choices(v[1], [v[2], ...verbs.map(x => x[1])]) }; }, pair: () => { const v = pick(verbs); return [v[0], v[1]]; } },
+        { id: 'wtype', name: 'أنواع الكلمة', gen: () => { const [w, t] = pick(wordTypes); return { prompt: 'ما نوعُ هذه الكلمة؟', big: w, say: w, answer: t, choices: ['اسم', 'فعل', 'حرف'], explain: `«${w}» ${t}: ${WTYPE_WHY[t]}` }; } },
+        { id: 'tense', name: 'أزمنة الفعل', gen: () => { const v = pick(verbs), i = Math.floor(Math.random() * 3); return { prompt: 'ما زمنُ هذا الفعل؟', big: v[i], say: v[i], answer: tenseNames[i], choices: tenseNames.slice(), explain: `«${v[i]}» فعل ${tenseNames[i]}: ${TENSE_WHY[i]}` }; } },
+        T('syn', 'المرادفات', synonyms, (a, b) => ({ prompt: 'ما مرادفُ هذه الكلمة؟', big: a, say: a, explain: `«${a}» و«${b}» بمعنىً واحد.` })),
+        { id: 'present', name: 'الماضي والمضارع', gen: () => { const v = pick(verbs); return { prompt: 'ما المضارعُ من هذا الفعل؟', big: v[0], say: v[0], answer: v[1], choices: choices(v[1], [v[2], ...verbs.map(x => x[1])]), explain: `الماضي «${v[0]}»، والمضارع «${v[1]}»، والأمر «${v[2]}».` }; }, pair: () => { const v = pick(verbs); return [v[0], v[1]]; } },
+        readTopic(reading.mid),
       ],
       words: morePics.slice(10, 22),
+      order: orderFor(4),
     },
     5: {
       topics: [
-        { id: 'ptype', name: 'أنواع الجمع', gen: () => { const [w, t] = pick(pluralTypes); return { prompt: 'ما نوعُ هذا الجمع؟', big: w, say: w, answer: t, choices: ['جمع مذكر سالم', 'جمع مؤنث سالم', 'جمع تكسير'] }; }, long: true },
-        { id: 'pron', name: 'الضمائر', gen: () => { const [s, a, c] = pick(pronouns); return { prompt: 'اخترِ الضميرَ المناسب:', big: s, bigClass: 'sentence', answer: a, choices: shuffle(c) }; } },
-        { id: 'prep', name: 'حروف الجر', gen: () => { const [s, a] = pick(preps); return { prompt: 'اخترْ حرفَ الجرِّ المناسب:', big: s, bigClass: 'sentence', answer: a, choices: choices(a, ['في', 'من', 'إلى', 'على', 'عن']) }; } },
-        T('plural', 'الجمع', plural, a => ({ prompt: 'ما جمعُ هذه الكلمة؟', big: a, say: a })),
+        { id: 'ptype', name: 'أنواع الجمع', gen: () => { const [w, t] = pick(pluralTypes); return { prompt: 'ما نوعُ هذا الجمع؟', big: w, say: w, answer: t, choices: ['جمع مذكر سالم', 'جمع مؤنث سالم', 'جمع تكسير'], explain: `«${w}» ${t}: ${PTYPE_WHY[t]}` }; }, long: true },
+        { id: 'pron', name: 'الضمائر', gen: () => { const [s, a, c] = pick(pronouns); return { prompt: 'اخترِ الضميرَ المناسب:', big: s, bigClass: 'sentence', answer: a, choices: shuffle(c), explain: `${s.replace('___', a)} — الضميرُ يناسب الفعل.` }; } },
+        { id: 'prep', name: 'حروف الجر', gen: () => { const [s, a] = pick(preps); return { prompt: 'اخترْ حرفَ الجرِّ المناسب:', big: s, bigClass: 'sentence', answer: a, choices: choices(a, ['في', 'من', 'إلى', 'على', 'عن']), explain: `الصواب: ${s.replace('___', a)}` }; } },
+        T('plural', 'الجمع', plural, (a, b) => ({ prompt: 'ما جمعُ هذه الكلمة؟', big: a, say: a, explain: `جمعُ «${a}» هو «${b}».` })),
+        readTopic(reading.hard),
       ],
       words: morePics.slice(16, 28),
+      order: orderFor(5),
     },
     6: {
       topics: [
         { id: 'fail', name: 'الفاعل والمفعول به', gen: () => {
           const s = pick(svo), askSubj = Math.random() < 0.5;
-          return { prompt: askSubj ? 'ما الفاعلُ في الجملة؟' : 'ما المفعولُ به في الجملة؟', big: s.join(' ') + '.', bigClass: 'sentence', say: s.join(' '), answer: askSubj ? s[1] : s[2], choices: shuffle(s.slice()) };
+          return { prompt: askSubj ? 'ما الفاعلُ في الجملة؟' : 'ما المفعولُ به في الجملة؟', big: s.join(' ') + '.', bigClass: 'sentence', say: s.join(' '), answer: askSubj ? s[1] : s[2], choices: shuffle(s.slice()),
+            explain: `الفاعلُ مَن قام بالفعل: «${s[1]}» (مرفوع). المفعولُ به مَن وقع عليه الفعل: «${s[2]}» (منصوب).` };
         } },
-        { id: 'nasikh', name: 'كان وإنّ وأخواتهما', long: true, gen: () => { const [s, g] = pick(nawasikh); return { prompt: 'الناسخُ في هذه الجملة من:', big: s, bigClass: 'sentence', say: s, answer: g, choices: [KANA, INNA] }; } },
+        { id: 'nasikh', name: 'كان وإنّ وأخواتهما', long: true, gen: () => { const [s, g] = pick(nawasikh); return { prompt: 'الناسخُ في هذه الجملة من:', big: s, bigClass: 'sentence', say: s, answer: g, choices: [KANA, INNA],
+          explain: g === KANA ? 'كان وأخواتها أفعال: كان، أصبح، صار، ما زال، ليس، ظلّ، بات، أمسى. ترفع المبتدأ وتنصب الخبر.' : 'إنّ وأخواتها حروف: إنّ، أنّ، كأنّ، لكنّ، ليت، لعلّ. تنصب المبتدأ وترفع الخبر.' }; } },
         { id: 'nominal', name: 'المبتدأ والخبر', gen: () => {
           const [m, k] = pick(nominal), askM = Math.random() < 0.5;
-          return { prompt: askM ? 'ما المبتدأُ في الجملة؟' : 'ما الخبرُ في الجملة؟', big: `${m} ${k}.`, bigClass: 'sentence', say: `${m} ${k}`, answer: askM ? m : k, choices: shuffle([m, k]) };
+          return { prompt: askM ? 'ما المبتدأُ في الجملة؟' : 'ما الخبرُ في الجملة؟', big: `${m} ${k}.`, bigClass: 'sentence', say: `${m} ${k}`, answer: askM ? m : k, choices: shuffle([m, k]), explain: `المبتدأ «${m}» هو ما نتحدث عنه، والخبر «${k}» هو ما نخبر به عنه.` };
         } },
-        T('syn', 'المرادفات', synonyms, a => ({ prompt: 'ما مرادفُ هذه الكلمة؟', big: a, say: a })),
+        T('syn', 'المرادفات', synonyms, (a, b) => ({ prompt: 'ما مرادفُ هذه الكلمة؟', big: a, say: a, explain: `«${a}» و«${b}» بمعنىً واحد.` })),
+        readTopic(reading.hard),
       ],
       words: morePics.slice(22),
+      order: orderFor(6),
     },
   };
 
